@@ -197,16 +197,16 @@ Bullish structure. ETF inflows strong. Accumulate dips.
     
     show_table(
         "Search Results: 'RSI overbought'",
-        ["Score", "Path", "Preview"],
-        [(f"{score:.2f}", node.path, node.content[:40] + "...") for node, score in results]
+        ["Rank", "Path", "Preview"],
+        [(f"#{i+1}", node.path, node.content[:40] + "...") for i, (node, score) in enumerate(results)]
     )
     
     console.print()
     results2 = avm.search("risk management", limit=5)
     show_table(
         "Search Results: 'risk management'",
-        ["Score", "Path", "Preview"],
-        [(f"{score:.2f}", node.path, node.content[:40] + "...") for node, score in results2]
+        ["Rank", "Path", "Preview"],
+        [(f"#{i+1}", node.path, node.content[:40] + "...") for i, (node, score) in enumerate(results2)]
     )
     
     pause()
