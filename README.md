@@ -1,203 +1,307 @@
-# AI Virtual Filesystem (VFS)
+# VFS - AI Virtual Filesystem
 
-让 AI Agent 通过文件路径读写结构化知识。
-
-```
-Bot ←→ vfs read/write ←→ VFSStore ←→ SQLite + FTS5
-                              ↓
-                         Providers
-                    (Alpaca, Yahoo, RSS)
-```
-
-## 设计理念
-
-- **对 Bot 接口是"文件"**：路径 + 内容，简单直观
-- **内部是结构化存储**：SQLite + FTS5 + 关系图
-- **权限硬编码**：`/memory` 可写，`/research` `/live` 只读
-- **TTL 缓存**：`/live` 路径自动刷新过期数据
-- **版本追踪**：每次写入保存 diff
+让 AI Bot 通过文件路径读写结构化知识。配置驱动，支持自定义 provider 和权限规则。
 
 ## 安装
 
 ```bash
-cd ~/.openclaw/workspace/vfs
 pip install -e .
-
-# 验证安装
-vfs stats
 ```
 
-## 使用
+## 快速开始
 
-### 读取
+```python
+from vfs import VFS
 
-```bash
-# 读取 live 数据（自动刷新过期缓存）
-vfs read /live/positions.md
+vfs = VFS()
 
-# 强制刷新
-vfs read /live/positions.md --refresh
+# 读写
+vfs.write("/memory/lesson1.md", "# 交易教训\n\nRSI>70要谨慎")
+node = vfs.read("/memory/lesson1.md")
 
-# 读取 memory
-vfs read /memory/lessons/001.md
+# 搜索
+results = vfs.search("RSI")
+
+# 关联
+vfs.link("/memory/lesson1.md", "/market/indicators/NVDA.md", "related_to")
 ```
 
-### 写入
+## 核心功能
 
-```bash
-# 写入 memory（仅 /memory/* 可写）
-vfs write /memory/lesson.md --content "今天学到了..."
+### 1. 配置驱动
 
-# 从文件写入
-vfs write /memory/report.md --file ./report.md
+```yaml
+# config.yaml
+providers:
+  - pattern: "/live/positions*"
+    type: alpaca_positions
+    ttl: 60
+  - pattern: "/live/indicators/*"
+    type: technical_indicators
+    ttl: 300
 
-# 从 stdin 写入
-echo "内容" | vfs write /memory/note.md
+permissions:
+  - pattern: "/memory/*"
+    access: rw
+  - pattern: "/live/*"
+    access: ro
+
+default_access: ro
 ```
 
-### 搜索
-
-```bash
-# 全文搜索
-vfs search "能源板块超卖"
-
-# 限制结果数
-vfs search "RSI" --limit 5
+```python
+vfs = VFS(config_path="config.yaml")
 ```
 
-### 关系图
+### 2. 联动检索
 
-```bash
-# 查看关联
-vfs links /research/MSFT.md
+语义搜索 + 全文搜索 + 图扩展，返回相关节点：
 
-# 添加关联
-vfs link /research/MSFT.md /research/AAPL.md --type peer
+```python
+# 启用语义搜索（可选）
+vfs.enable_embedding(model="text-embedding-3-small")
+vfs.embed_all()
 
-# 关联类型：peer, parent, citation, derived, related
+# 联动检索
+result = vfs.retrieve("NVDA风险", expand_graph=True)
+for node in result.nodes:
+    print(f"{result.get_source(node.path)} {node.path}")
+
+# 🎯 /market/indicators/NVDA.md  (语义匹配)
+# 📝 /memory/lessons/nvda.md     (关键词匹配)
+# 🔗 /market/indicators/AMD.md   (图扩展)
 ```
 
-### 其他
+### 3. 动态文档合成
+
+将多个相关节点聚合成一个结构化文档：
+
+```python
+doc = vfs.synthesize("NVDA风险分析")
+print(doc)
+```
+
+输出：
+```markdown
+# NVDA风险分析 (auto-generated)
+
+## 技术指标
+> 🎯 来源: `/market/indicators/NVDA.md`
+RSI: 72 (超买警告), MACD: 死叉形成中
+
+## 历史经验
+> 📝 来源: `/memory/lessons/nvda.md`
+上次RSI>70后回调15%
+
+## 关联标的
+> 🔗 来源: `/market/indicators/AMD.md`
+AMD RSI: 65, 走势相关性0.85
+```
+
+### 4. Agent Memory
+
+Token 可控的记忆检索，支持多 agent 隔离：
+
+```python
+memory = vfs.agent_memory("akashi")
+
+# 写入记忆
+memory.remember(
+    "RSI超过70时要谨慎，上次NVDA跌了15%",
+    importance=0.8,
+    tags=["trading", "risk"]
+)
+
+# Token 可控的检索
+context = memory.recall(
+    "NVDA风险",
+    max_tokens=4000,
+    strategy="balanced"  # importance/recency/relevance/balanced
+)
+print(context)
+```
+
+输出：
+```markdown
+## Relevant Memory (2 items, ~150 tokens)
+
+[/memory/private/akashi/nvda_lesson.md] (0.85) RSI超过70时要谨慎，上次NVDA跌了15%
+
+[/memory/shared/trading/risk_rules.md] (0.72) 单票仓位不超过15%，必设止损
+
+---
+*Tokens: ~150/4000 | Strategy: balanced | Query: "NVDA风险"*
+```
+
+#### 路径结构
+
+```
+/memory/private/{agent_id}/*   # 私有记忆
+/memory/shared/{namespace}/*   # 共享空间
+```
+
+#### 评分策略
+
+| 策略 | 说明 |
+|------|------|
+| `importance` | 按节点重要性 (0-1) |
+| `recency` | 按最近访问时间（指数衰减，半衰期1周） |
+| `relevance` | 按语义/关键词相关性 |
+| `balanced` | 加权综合（默认：relevance 0.5 + importance 0.3 + recency 0.2） |
+
+## CLI
 
 ```bash
-# 列出节点
+# 读写
+vfs read /memory/lesson1.md
+vfs write /memory/lesson1.md "内容"
+
+# 搜索
+vfs search "RSI"
+vfs retrieve "NVDA风险" --depth 2
+
+# 动态文档
+vfs synthesize "NVDA风险分析"
+
+# Agent Memory
+vfs recall "RSI" --agent akashi --max-tokens 2000
+vfs remember --agent akashi -c "教训内容" -i 0.8 --tags "trading"
+vfs memory-stats --agent akashi
+
+# 关联
+vfs links /memory/lesson1.md
+vfs link /a.md /b.md related_to
+
+# 管理
 vfs list /memory
-
-# 查看历史
-vfs history /memory/lesson.md
-
-# 存储统计
+vfs history /memory/lesson1.md
+vfs refresh /live/indicators/*
+vfs config
 vfs stats
 ```
 
-## 路径设计
+## Provider 类型
 
-| 前缀 | 说明 | 权限 | TTL |
-|------|------|------|-----|
-| `/live` | 实时数据 | 只读 | 有 |
-| `/research` | 静态研报 | 只读 | 无 |
-| `/memory` | Bot 记忆 | 读写 | 无 |
-| `/links` | 关系索引 | 只读 | 无 |
+| 类型 | 说明 |
+|------|------|
+| `alpaca_positions` | Alpaca 持仓 |
+| `alpaca_orders` | Alpaca 订单 |
+| `technical_indicators` | 技术指标 (Yahoo Finance) |
+| `news` | 新闻 (RSS) |
+| `watchlist` | 自选股 |
+| `memory` | 本地记忆 |
+| `http_json` | 通用 HTTP JSON |
+
+### 自定义 Provider
+
+```python
+from vfs import VFS, register_provider_type
+from vfs.providers.base import BaseProvider
+
+class MyProvider(BaseProvider):
+    def fetch(self, path: str, params: dict) -> str:
+        return f"# Data for {path}\n\nCustom content here"
+
+register_provider_type("my_provider", MyProvider)
+
+# 在配置中使用
+# providers:
+#   - pattern: "/custom/*"
+#     type: my_provider
+```
+
+## 配置示例
+
+### Trading Bot
+
+```yaml
+# trading_bot.yaml
+providers:
+  - pattern: "/live/positions*"
+    type: alpaca_positions
+    ttl: 60
+    params:
+      api_key: ${ALPACA_API_KEY}
+      api_secret: ${ALPACA_API_SECRET}
+
+  - pattern: "/live/indicators/*"
+    type: technical_indicators
+    ttl: 300
+
+permissions:
+  - pattern: "/memory/private/*"
+    access: rw
+  - pattern: "/memory/shared/*"
+    access: rw
+  - pattern: "/live/*"
+    access: ro
+
+retrieval:
+  default_max_tokens: 4000
+  scoring_weights:
+    importance: 0.3
+    recency: 0.2
+    relevance: 0.5
+```
+
+### Home Assistant
+
+```yaml
+# home_assistant.yaml
+providers:
+  - pattern: "/devices/*"
+    type: http_json
+    ttl: 30
+    params:
+      base_url: ${HA_URL}/api/states
+      headers:
+        Authorization: "Bearer ${HA_TOKEN}"
+
+  - pattern: "/automations/*"
+    type: memory
+    ttl: 0
+
+permissions:
+  - pattern: "/devices/*"
+    access: ro
+  - pattern: "/automations/*"
+    access: rw
+```
 
 ## 架构
 
 ```
-Bot ←→ VFS CLI ←→ VFSStore ←→ SQLite
-                     ↓
-              ┌──────┴──────┐
-              │   nodes     │ ← 节点内容
-              │   nodes_fts │ ← FTS5 全文索引
-              │   edges     │ ← 关系图
-              │   diffs     │ ← 变更历史
-              │   embeddings│ ← 向量（预留）
-              └─────────────┘
+┌─────────────────────────────────────────────────────┐
+│                      VFS API                        │
+│  read() write() search() retrieve() synthesize()   │
+├─────────────────────────────────────────────────────┤
+│                   AgentMemory                       │
+│  recall() remember() share() (token-aware)         │
+├─────────────────────────────────────────────────────┤
+│                    Retriever                        │
+│  Semantic + FTS + Graph Expansion + Synthesis       │
+├─────────────────────────────────────────────────────┤
+│                   VFSConfig                         │
+│  Providers / Permissions / YAML loading             │
+├─────────────────────────────────────────────────────┤
+│                   VFSStore                          │
+│  SQLite + FTS5 + Diff Tracking                      │
+├──────────────────────┬──────────────────────────────┤
+│      KVGraph         │        EmbeddingStore        │
+│  Adjacency List      │   Cosine Similarity Search   │
+├──────────────────────┴──────────────────────────────┤
+│                    Providers                        │
+│  Alpaca | Indicators | News | HTTP | Memory | ...   │
+└─────────────────────────────────────────────────────┘
 ```
 
-## Provider
+## 版本
 
-- `AlpacaPositionsProvider`: 从 Alpaca 获取持仓数据 → `/live/positions.md`
-- `MemoryProvider`: Bot 记忆区 → `/memory/*`
+- **v0.4.0** - Agent Memory (token-aware recall)
+- **v0.3.0** - Linked Retrieval + Document Synthesis
+- **v0.2.0** - Config-driven providers/permissions
+- **v0.1.0** - Core VFS (read/write/search/links)
 
-## Providers
+## License
 
-| Provider | 路径 | 数据源 | TTL |
-|----------|------|--------|-----|
-| AlpacaPositionsProvider | `/live/positions.md` | Alpaca API | 60s |
-| AlpacaOrdersProvider | `/live/orders.md` | Alpaca API | 30s |
-| TechnicalIndicatorsProvider | `/live/indicators/AAPL.md` | Yahoo Finance | 300s |
-| NewsProvider | `/live/news/market.md` | RSS (Yahoo, CoinDesk) | 600s |
-| WatchlistProvider | `/live/watchlist.md` | Yahoo Finance | 300s |
-| MemoryProvider | `/memory/*` | Bot 写入 | - |
-
-### 技术指标
-
-```bash
-vfs read /live/indicators/NVDA.md
-```
-
-输出包括：
-- RSI (14) + 超买/超卖信号
-- MACD + 金叉/死叉
-- SMA/EMA 移动平均线
-- 布林带 + %B
-- ATR 波动率
-
-### 自选股概览
-
-```bash
-vfs read /live/watchlist.md        # 默认（SPY, QQQ, AAPL...）
-vfs read /live/watchlist/tech.md   # 科技股
-vfs read /live/watchlist/crypto.md # 加密相关股
-```
-
-## 批量操作
-
-```bash
-# 导入目录
-vfs import ./reports --prefix /research --pattern "**/*.md"
-
-# 导出所有节点
-vfs export / --output backup.json
-
-# 自动发现关系
-vfs auto-link --by symbol
-```
-
-## Python API
-
-```python
-from vfs import VFSStore, VFSNode
-
-store = VFSStore()
-
-# 读取
-node = store.get_node("/memory/lesson.md")
-print(node.content)
-
-# 写入
-new_node = VFSNode(path="/memory/new.md", content="Hello")
-store.put_node(new_node)
-
-# 搜索
-results = store.search("RSI oversold")
-for node, score in results:
-    print(f"{node.path}: {score}")
-
-# 关系
-store.add_edge("/research/AAPL.md", "/research/MSFT.md", EdgeType.PEER)
-links = store.get_links("/research/AAPL.md")
-```
-
-## 测试
-
-```bash
-pytest tests/ -v
-# 33 passed
-```
-
-## TODO
-
-- [ ] sqlite-vec 向量语义搜索
-- [ ] 更多 provider（财报、宏观数据）
-- [ ] MCP server 接入
-- [ ] 过期数据自动清理
+MIT

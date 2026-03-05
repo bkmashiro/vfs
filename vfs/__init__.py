@@ -5,7 +5,7 @@ AI Virtual Filesystem (VFS)
 配置驱动，支持自定义 provider 和权限规则。
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .node import VFSNode
 from .graph import KVGraph
