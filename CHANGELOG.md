@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Package renamed from `vfs` to `avm`
-- Default DB path: `~/.local/share/vfs/vfs.db` (XDG standard)
+- Default DB path: `~/.local/share/avm/avm.db` (XDG standard)
 
 ## [0.8.0] - 2026-03-05
 

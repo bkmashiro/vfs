@@ -13,13 +13,13 @@ pip install -e .
 Start the VFS MCP server:
 
 ```bash
-vfs-mcp --user akashi
+avm-mcp --user akashi
 ```
 
 Or with API key authentication:
 
 ```bash
-vfs-mcp --api-key $VFS_API_KEY
+avm-mcp --api-key $AVM_API_KEY
 ```
 
 ## MCP Configuration
@@ -28,7 +28,7 @@ Add to your MCP config (e.g., `mcp_servers.yaml`):
 
 ```yaml
 avm-memory:
-  command: vfs-mcp
+  command: avm-mcp
   args:
     - --user
     - ${VFS_USER:-default}
@@ -161,10 +161,10 @@ The server respects VFS permissions:
 
 ## Database
 
-Default location: `~/.openclaw/vfs/vfs.db`
+Default location: `~/.local/share/avm/avm.db`
 
 Override with `--db`:
 
 ```bash
-vfs-mcp --db /path/to/custom.db
+avm-mcp --db /path/to/custom.db
 ```

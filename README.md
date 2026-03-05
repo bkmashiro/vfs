@@ -243,7 +243,7 @@ default_access: ro
 ### Custom Handlers
 
 ```python
-from vfs import BaseHandler, register_handler
+from avm import BaseHandler, register_handler
 
 class RedisHandler(BaseHandler):
     def read(self, path, context):
@@ -327,7 +327,7 @@ key = avm.create_api_key(user, paths=["/memory/*"], actions=["read"])
 
 ## Database
 
-Default location: `~/.local/share/vfs/avm.db`
+Default location: `~/.local/share/avm/avm.db`
 
 Override:
 ```bash

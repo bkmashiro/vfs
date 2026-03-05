@@ -91,7 +91,7 @@ class AVMStore:
     
     def __init__(self, db_path: str = None):
         if db_path is None:
-            # Default: use XDG data home or ~/.local/share/vfs
+            # Default: use XDG data home or ~/.local/share/avm
             xdg_data = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
             db_path = str(Path(xdg_data) / "vfs" / "avm.db")
         

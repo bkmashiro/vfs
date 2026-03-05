@@ -179,7 +179,7 @@ def load_config(config_path: str = None) -> AVMConfig:
     Priority:
     1. Specified path
     2. Environment variable VFS_CONFIG
-    3. ~/.vfs/config.yaml
+    3. ~/.avm/config.yaml
     4. Default configuration
     """
     paths_to_try = []
@@ -190,7 +190,7 @@ def load_config(config_path: str = None) -> AVMConfig:
     if os.environ.get("VFS_CONFIG"):
         paths_to_try.append(os.environ["VFS_CONFIG"])
     
-    paths_to_try.append(str(Path.home() / ".vfs" / "config.yaml"))
+    paths_to_try.append(str(Path.home() / ".avm" / "config.yaml"))
     paths_to_try.append(str(Path.home() / ".openclaw" / "vfs" / "config.yaml"))
     
     for path in paths_to_try:
