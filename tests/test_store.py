@@ -6,9 +6,9 @@ import pytest
 import tempfile
 import os
 
-from vfs.store import VFSStore
-from vfs.node import VFSNode, NodeType
-from vfs.graph import EdgeType
+from avm.store import VFSStore
+from avm.node import VFSNode, NodeType
+from avm.graph import EdgeType
 
 
 @pytest.fixture

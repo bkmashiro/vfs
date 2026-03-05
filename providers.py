@@ -13,7 +13,7 @@ from typing import Callable, Optional
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from vfs import VFSProvider, VFSNode
+from avm import VFSProvider, VFSNode
 
 
 # ── 1. StaticFileProvider ─────────────────────────────────────────────────

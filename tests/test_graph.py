@@ -4,7 +4,7 @@ test_graph.py - KVGraph 测试
 
 import pytest
 
-from vfs.graph import KVGraph, Edge, EdgeType
+from avm.graph import KVGraph, Edge, EdgeType
 
 
 class TestEdge:

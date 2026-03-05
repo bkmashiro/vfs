@@ -11,7 +11,7 @@ import sys, os, json, urllib.request, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from vfs import VFSProvider, VFSNode
+from avm import VFSProvider, VFSNode
 
 
 def _load_trading_env() -> dict:

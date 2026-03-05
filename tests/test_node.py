@@ -5,7 +5,7 @@ test_node.py - VFSNode 测试
 import pytest
 from datetime import datetime
 
-from vfs.node import VFSNode, NodeDiff, NodeType, Permission
+from avm.node import VFSNode, NodeDiff, NodeType, Permission
 
 
 class TestVFSNode:

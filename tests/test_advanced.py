@@ -7,7 +7,7 @@ import tempfile
 import os
 from datetime import datetime, timedelta
 
-from vfs import VFS, VFSNode
+from avm import VFS, VFSNode
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def vfs():
     """创建临时 VFS 实例"""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "test.db")
-        from vfs.config import VFSConfig, PermissionRule
+        from avm.config import VFSConfig, PermissionRule
         config = VFSConfig(
             db_path=db_path,
             permissions=[
@@ -81,7 +81,7 @@ class TestMemoryDecay:
     """记忆衰减测试"""
     
     def test_decay_calculation(self, vfs):
-        from vfs.advanced import MemoryDecay
+        from avm.advanced import MemoryDecay
         
         akashi = vfs.agent_memory("akashi")
         akashi.remember("Test content", title="test", importance=1.0)
@@ -180,7 +180,7 @@ class TestDerivedLinks:
         assert derived is not None
         
         # 验证链接
-        from vfs.advanced import DerivedLinkManager
+        from avm.advanced import DerivedLinkManager
         link_mgr = DerivedLinkManager(vfs.store)
         chains = link_mgr.get_derivation_chain(derived.path)
         

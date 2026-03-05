@@ -93,7 +93,7 @@ class VFSStore:
         if db_path is None:
             # Default: use XDG data home or ~/.local/share/vfs
             xdg_data = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
-            db_path = str(Path(xdg_data) / "vfs" / "vfs.db")
+            db_path = str(Path(xdg_data) / "vfs" / "avm.db")
         
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
