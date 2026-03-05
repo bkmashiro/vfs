@@ -692,3 +692,92 @@ class AgentMemory:
         
         compactor = MemoryCompactor(self.vfs.store)
         return compactor.compact(path, keep_recent)
+    
+    # ─── 标签系统 ─────────────────────────────────────────
+    
+    def by_tag(self, tag: str, limit: int = 100) -> List[VFSNode]:
+        """按标签获取记忆"""
+        from .advanced import TagManager
+        
+        tag_mgr = TagManager(self.vfs.store)
+        nodes = tag_mgr.by_tag(tag, prefix="/memory", limit=limit)
+        
+        # 过滤权限
+        return [n for n in nodes if self._can_read(n.path)]
+    
+    def tag_cloud(self) -> Dict[str, int]:
+        """获取标签词云（频率分布）"""
+        from .advanced import TagManager
+        
+        tag_mgr = TagManager(self.vfs.store)
+        return tag_mgr.tag_cloud(prefix="/memory")
+    
+    def suggest_tags(self, content: str, top_k: int = 5) -> List[str]:
+        """为内容建议标签"""
+        from .advanced import TagManager
+        
+        tag_mgr = TagManager(self.vfs.store)
+        return tag_mgr.suggest_tags(content, top_k)
+    
+    # ─── 访问统计 ─────────────────────────────────────────
+    
+    def hot_memories(self, days: int = 7, limit: int = 10) -> List[Tuple[str, int]]:
+        """获取热门记忆（高访问量）"""
+        from .advanced import AccessStats
+        
+        stats = AccessStats(self.vfs.store)
+        return stats.hot_paths(days, limit)
+    
+    def cold_memories(self, days: int = 30, limit: int = 20) -> List[VFSNode]:
+        """获取冷门记忆（长期未访问）"""
+        from .advanced import AccessStats
+        
+        stats = AccessStats(self.vfs.store)
+        nodes = stats.cold_paths(days, prefix="/memory", limit=limit)
+        return [n for n in nodes if self._can_read(n.path)]
+    
+    def my_activity(self, days: int = 7) -> Dict[str, int]:
+        """获取我的活动统计"""
+        from .advanced import AccessStats
+        
+        stats = AccessStats(self.vfs.store)
+        return stats.agent_activity(self.agent_id, days)
+    
+    # ─── 导出/快照 ─────────────────────────────────────────
+    
+    def export(self, format: str = "jsonl") -> str:
+        """
+        导出我的记忆
+        
+        Args:
+            format: "jsonl" 或 "markdown"
+        """
+        from .advanced import ExportManager
+        
+        export_mgr = ExportManager(self.vfs.store)
+        
+        if format == "markdown":
+            return export_mgr.export_markdown(
+                prefix=self.private_prefix,
+                agent_id=self.agent_id
+            )
+        else:
+            return export_mgr.export_jsonl(
+                prefix=self.private_prefix,
+                agent_id=self.agent_id
+            )
+    
+    def import_memories(self, jsonl: str) -> int:
+        """
+        导入记忆
+        
+        Args:
+            jsonl: JSONL 格式的记忆数据
+        
+        Returns:
+            导入数量
+        """
+        from .advanced import ExportManager
+        
+        export_mgr = ExportManager(self.vfs.store)
+        return export_mgr.import_jsonl(jsonl)

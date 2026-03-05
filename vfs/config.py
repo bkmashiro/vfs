@@ -164,6 +164,7 @@ DEFAULT_CONFIG = VFSConfig(
         PermissionRule(pattern="/memory/private/*", access="rw"),
         PermissionRule(pattern="/memory/shared/*", access="rw"),
         PermissionRule(pattern="/memory/*", access="rw"),
+        PermissionRule(pattern="/snapshots/*", access="rw"),
         PermissionRule(pattern="/live/*", access="ro"),
         PermissionRule(pattern="/research/*", access="ro"),
     ],

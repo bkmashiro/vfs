@@ -24,6 +24,163 @@ from .graph import EdgeType
 
 
 # ═══════════════════════════════════════════════════════════════
+# Cross-VFS Sync
+# ═══════════════════════════════════════════════════════════════
+
+class SyncManager:
+    """
+    Cross-VFS synchronization
+    
+    Supports:
+    - File-based sync (local directory)
+    - S3-compatible sync (with boto3)
+    - Conflict resolution: append (default) or last-write-wins
+    """
+    
+    def __init__(self, store: VFSStore):
+        self.store = store
+    
+    def sync_to_directory(self, directory: str, 
+                          prefix: str = "/memory") -> Dict[str, int]:
+        """
+        Sync to local directory
+        
+        Returns: {"exported": N, "imported": N, "conflicts": N}
+        """
+        from pathlib import Path
+        import json
+        
+        dir_path = Path(directory)
+        dir_path.mkdir(parents=True, exist_ok=True)
+        
+        stats = {"exported": 0, "imported": 0, "conflicts": 0}
+        
+        # Export local nodes
+        nodes = self.store.list_nodes(prefix, limit=10000)
+        local_paths = {}
+        
+        for node in nodes:
+            # Convert path to file path
+            rel_path = node.path.lstrip("/").replace("/", "_") + ".json"
+            file_path = dir_path / rel_path
+            
+            # Check for conflict
+            if file_path.exists():
+                existing = json.loads(file_path.read_text())
+                if existing.get("updated_at", "") > node.updated_at.isoformat():
+                    # Remote is newer, will import later
+                    stats["conflicts"] += 1
+                    continue
+            
+            # Write
+            data = {
+                "path": node.path,
+                "content": node.content,
+                "meta": node.meta,
+                "updated_at": node.updated_at.isoformat(),
+                "version": node.version,
+            }
+            file_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+            local_paths[node.path] = True
+            stats["exported"] += 1
+        
+        # Import remote nodes
+        for file_path in dir_path.glob("*.json"):
+            try:
+                data = json.loads(file_path.read_text())
+                path = data.get("path")
+                
+                if path and path not in local_paths:
+                    node = VFSNode(
+                        path=path,
+                        content=data.get("content", ""),
+                        meta=data.get("meta", {}),
+                    )
+                    self.store.put_node(node)
+                    stats["imported"] += 1
+            except Exception as e:
+                print(f"Import error {file_path}: {e}")
+        
+        return stats
+    
+    def sync_to_s3(self, bucket: str, prefix: str = "vfs/",
+                   memory_prefix: str = "/memory") -> Dict[str, int]:
+        """
+        Sync to S3-compatible storage
+        
+        Requires: pip install boto3
+        """
+        try:
+            import boto3
+        except ImportError:
+            raise RuntimeError("boto3 required: pip install boto3")
+        
+        import json
+        
+        s3 = boto3.client("s3")
+        stats = {"exported": 0, "imported": 0, "conflicts": 0}
+        
+        # Get local nodes
+        nodes = self.store.list_nodes(memory_prefix, limit=10000)
+        local_paths = {}
+        
+        for node in nodes:
+            key = prefix + node.path.lstrip("/").replace("/", "_") + ".json"
+            
+            # Check if exists in S3
+            try:
+                response = s3.get_object(Bucket=bucket, Key=key)
+                existing = json.loads(response["Body"].read())
+                
+                if existing.get("updated_at", "") > node.updated_at.isoformat():
+                    stats["conflicts"] += 1
+                    continue
+            except s3.exceptions.NoSuchKey:
+                pass
+            except Exception:
+                pass
+            
+            # Upload
+            data = {
+                "path": node.path,
+                "content": node.content,
+                "meta": node.meta,
+                "updated_at": node.updated_at.isoformat(),
+                "version": node.version,
+            }
+            s3.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=json.dumps(data, ensure_ascii=False),
+                ContentType="application/json",
+            )
+            local_paths[node.path] = True
+            stats["exported"] += 1
+        
+        # Import from S3
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                try:
+                    response = s3.get_object(Bucket=bucket, Key=obj["Key"])
+                    data = json.loads(response["Body"].read())
+                    path = data.get("path")
+                    
+                    if path and path not in local_paths:
+                        node = VFSNode(
+                            path=path,
+                            content=data.get("content", ""),
+                            meta=data.get("meta", {}),
+                        )
+                        self.store.put_node(node)
+                        stats["imported"] += 1
+                except Exception as e:
+                    print(f"S3 import error: {e}")
+        
+        return stats
+
+
+# ═══════════════════════════════════════════════════════════════
 # Subscription System
 # ═══════════════════════════════════════════════════════════════
 
@@ -516,6 +673,391 @@ class DerivedLinkManager:
                 nodes.append(node)
         
         return nodes
+
+
+# ═══════════════════════════════════════════════════════════════
+# Time-Based Queries
+# ═══════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════
+# Tag System
+# ═══════════════════════════════════════════════════════════════
+
+class TagManager:
+    """
+    Enhanced tag system
+    
+    - Query by tag
+    - Tag cloud/frequency
+    - Auto-tagging suggestions
+    """
+    
+    def __init__(self, store: VFSStore):
+        self.store = store
+    
+    def by_tag(self, tag: str, prefix: str = "/memory",
+               limit: int = 100) -> List[VFSNode]:
+        """Get all memories with a specific tag"""
+        nodes = self.store.list_nodes(prefix, limit=limit * 2)
+        
+        matched = []
+        for node in nodes:
+            tags = node.meta.get("tags", [])
+            if tag.lower() in [t.lower() for t in tags]:
+                matched.append(node)
+        
+        return matched[:limit]
+    
+    def tag_cloud(self, prefix: str = "/memory",
+                  limit: int = 50) -> Dict[str, int]:
+        """Get tag frequency distribution"""
+        nodes = self.store.list_nodes(prefix, limit=1000)
+        
+        tag_counts: Dict[str, int] = {}
+        for node in nodes:
+            tags = node.meta.get("tags", [])
+            for tag in tags:
+                tag_lower = tag.lower()
+                tag_counts[tag_lower] = tag_counts.get(tag_lower, 0) + 1
+        
+        # Sort by frequency
+        sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
+        return dict(sorted_tags[:limit])
+    
+    def find_related_tags(self, tag: str, prefix: str = "/memory") -> Dict[str, int]:
+        """Find tags that co-occur with given tag"""
+        nodes = self.by_tag(tag, prefix)
+        
+        co_tags: Dict[str, int] = {}
+        for node in nodes:
+            tags = node.meta.get("tags", [])
+            for t in tags:
+                t_lower = t.lower()
+                if t_lower != tag.lower():
+                    co_tags[t_lower] = co_tags.get(t_lower, 0) + 1
+        
+        return dict(sorted(co_tags.items(), key=lambda x: x[1], reverse=True))
+    
+    def suggest_tags(self, content: str, top_k: int = 5) -> List[str]:
+        """Suggest tags based on content keywords"""
+        # Simple keyword extraction
+        words = content.lower().split()
+        
+        # Filter common words
+        stopwords = {"the", "a", "an", "is", "are", "was", "were", "be", "been",
+                    "have", "has", "had", "do", "does", "did", "will", "would",
+                    "could", "should", "may", "might", "must", "shall", "can",
+                    "to", "of", "in", "for", "on", "with", "at", "by", "from",
+                    "as", "into", "through", "during", "before", "after", "above",
+                    "below", "between", "under", "again", "further", "then", "once",
+                    "and", "but", "or", "nor", "so", "yet", "both", "either",
+                    "neither", "not", "only", "own", "same", "than", "too", "very",
+                    "just", "also", "now", "here", "there", "when", "where", "why",
+                    "how", "all", "each", "every", "both", "few", "more", "most",
+                    "other", "some", "such", "no", "any", "this", "that", "these",
+                    "those", "i", "you", "he", "she", "it", "we", "they", "me",
+                    "him", "her", "us", "them", "my", "your", "his", "its", "our",
+                    "their", "what", "which", "who", "whom", "whose"}
+        
+        # Count words
+        word_counts: Dict[str, int] = {}
+        for word in words:
+            word = ''.join(c for c in word if c.isalnum())
+            if word and len(word) > 2 and word not in stopwords:
+                word_counts[word] = word_counts.get(word, 0) + 1
+        
+        # Return top words as suggested tags
+        sorted_words = sorted(word_counts.items(), key=lambda x: x[1], reverse=True)
+        return [w for w, _ in sorted_words[:top_k]]
+
+
+# ═══════════════════════════════════════════════════════════════
+# Access Statistics
+# ═══════════════════════════════════════════════════════════════
+
+class AccessStats:
+    """
+    Track and analyze memory access patterns
+    """
+    
+    def __init__(self, store: VFSStore):
+        self.store = store
+        self._init_table()
+    
+    def _init_table(self):
+        """Initialize access log table"""
+        with self.store._conn() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS access_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    path TEXT NOT NULL,
+                    agent_id TEXT,
+                    access_type TEXT NOT NULL,
+                    timestamp TEXT NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_access_path 
+                ON access_log(path)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_access_time 
+                ON access_log(timestamp)
+            """)
+    
+    def log_access(self, path: str, agent_id: str = None, 
+                   access_type: str = "read"):
+        """Log an access event"""
+        with self.store._conn() as conn:
+            conn.execute("""
+                INSERT INTO access_log (path, agent_id, access_type, timestamp)
+                VALUES (?, ?, ?, ?)
+            """, (path, agent_id, access_type, datetime.utcnow().isoformat()))
+    
+    def hot_paths(self, days: int = 7, limit: int = 10) -> List[Tuple[str, int]]:
+        """Get most accessed paths in recent days"""
+        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        
+        with self.store._conn() as conn:
+            rows = conn.execute("""
+                SELECT path, COUNT(*) as count
+                FROM access_log
+                WHERE timestamp > ?
+                GROUP BY path
+                ORDER BY count DESC
+                LIMIT ?
+            """, (cutoff, limit)).fetchall()
+        
+        return [(row[0], row[1]) for row in rows]
+    
+    def cold_paths(self, days: int = 30, prefix: str = "/memory",
+                   limit: int = 20) -> List[VFSNode]:
+        """Get paths not accessed in recent days"""
+        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        
+        # Get recently accessed paths
+        with self.store._conn() as conn:
+            rows = conn.execute("""
+                SELECT DISTINCT path FROM access_log
+                WHERE timestamp > ?
+            """, (cutoff,)).fetchall()
+        
+        recent_paths = {row[0] for row in rows}
+        
+        # Get all nodes and filter
+        nodes = self.store.list_nodes(prefix, limit=limit * 3)
+        cold = [n for n in nodes if n.path not in recent_paths]
+        
+        return cold[:limit]
+    
+    def access_history(self, path: str, limit: int = 50) -> List[Dict]:
+        """Get access history for a path"""
+        with self.store._conn() as conn:
+            rows = conn.execute("""
+                SELECT agent_id, access_type, timestamp
+                FROM access_log
+                WHERE path = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """, (path, limit)).fetchall()
+        
+        return [
+            {"agent_id": row[0], "access_type": row[1], "timestamp": row[2]}
+            for row in rows
+        ]
+    
+    def agent_activity(self, agent_id: str, days: int = 7) -> Dict[str, int]:
+        """Get activity summary for an agent"""
+        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        
+        with self.store._conn() as conn:
+            rows = conn.execute("""
+                SELECT access_type, COUNT(*) as count
+                FROM access_log
+                WHERE agent_id = ? AND timestamp > ?
+                GROUP BY access_type
+            """, (agent_id, cutoff)).fetchall()
+        
+        return {row[0]: row[1] for row in rows}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Export/Snapshot
+# ═══════════════════════════════════════════════════════════════
+
+import json
+
+class ExportManager:
+    """
+    Export and snapshot functionality
+    """
+    
+    def __init__(self, store: VFSStore):
+        self.store = store
+    
+    def export_jsonl(self, prefix: str = "/memory",
+                     agent_id: str = None,
+                     limit: int = 10000) -> str:
+        """
+        Export memories as JSONL
+        
+        Returns: JSONL string (one JSON object per line)
+        """
+        nodes = self.store.list_nodes(prefix, limit=limit)
+        
+        if agent_id:
+            nodes = [n for n in nodes 
+                    if n.meta.get("author") == agent_id or 
+                       n.meta.get("agent") == agent_id]
+        
+        lines = []
+        for node in nodes:
+            obj = {
+                "path": node.path,
+                "content": node.content,
+                "meta": node.meta,
+                "created_at": node.created_at.isoformat(),
+                "updated_at": node.updated_at.isoformat(),
+                "version": node.version,
+            }
+            lines.append(json.dumps(obj, ensure_ascii=False))
+        
+        return "\n".join(lines)
+    
+    def export_markdown(self, prefix: str = "/memory",
+                        agent_id: str = None) -> str:
+        """Export as single markdown document"""
+        nodes = self.store.list_nodes(prefix, limit=1000)
+        
+        if agent_id:
+            nodes = [n for n in nodes 
+                    if n.meta.get("author") == agent_id or 
+                       n.meta.get("agent") == agent_id]
+        
+        # Sort by path
+        nodes.sort(key=lambda n: n.path)
+        
+        lines = [
+            f"# Memory Export",
+            f"",
+            f"*Exported: {datetime.utcnow().isoformat()}*",
+            f"*Prefix: {prefix}*",
+            f"*Count: {len(nodes)}*",
+            "",
+            "---",
+            "",
+        ]
+        
+        for node in nodes:
+            lines.append(f"## {node.path}")
+            lines.append("")
+            lines.append(f"*Updated: {node.updated_at.isoformat()}*")
+            if node.meta.get("tags"):
+                lines.append(f"*Tags: {', '.join(node.meta['tags'])}*")
+            lines.append("")
+            lines.append(node.content)
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+        
+        return "\n".join(lines)
+    
+    def import_jsonl(self, jsonl: str) -> int:
+        """
+        Import memories from JSONL
+        
+        Returns: Number of imported nodes
+        """
+        count = 0
+        
+        for line in jsonl.strip().split("\n"):
+            if not line.strip():
+                continue
+            
+            try:
+                obj = json.loads(line)
+                node = VFSNode(
+                    path=obj["path"],
+                    content=obj["content"],
+                    meta=obj.get("meta", {}),
+                )
+                self.store.put_node(node)
+                count += 1
+            except Exception as e:
+                print(f"Import error: {e}")
+        
+        return count
+    
+    def snapshot(self, name: str = None) -> str:
+        """
+        Create a named snapshot
+        
+        Returns: Snapshot path
+        """
+        if name is None:
+            name = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        
+        snapshot_path = f"/snapshots/{name}"
+        
+        # Get all nodes (exclude snapshots themselves)
+        all_nodes = self.store.list_nodes("/", limit=100000)
+        nodes = [n for n in all_nodes if not n.path.startswith("/snapshots")]
+        
+        # Create snapshot metadata
+        snapshot_meta = {
+            "type": "snapshot",
+            "name": name,
+            "created_at": datetime.utcnow().isoformat(),
+            "node_count": len(nodes),
+            "paths": [n.path for n in nodes],
+        }
+        
+        snapshot_node = VFSNode(
+            path=f"{snapshot_path}/meta.json",
+            content=json.dumps(snapshot_meta, indent=2),
+            meta={"type": "snapshot_meta"},
+        )
+        # Use internal method to bypass permission check
+        self.store._put_node_internal(snapshot_node)
+        
+        # Store content
+        content_node = VFSNode(
+            path=f"{snapshot_path}/content.jsonl",
+            content=self.export_jsonl("/"),
+            meta={"type": "snapshot_content"},
+        )
+        self.store._put_node_internal(content_node)
+        
+        return snapshot_path
+    
+    def list_snapshots(self) -> List[Dict]:
+        """List all snapshots"""
+        nodes = self.store.list_nodes("/snapshots", limit=100)
+        
+        snapshots = []
+        for node in nodes:
+            if node.path.endswith("/meta.json"):
+                try:
+                    meta = json.loads(node.content)
+                    snapshots.append(meta)
+                except:
+                    pass
+        
+        return sorted(snapshots, key=lambda x: x.get("created_at", ""), reverse=True)
+    
+    def restore_snapshot(self, name: str) -> int:
+        """
+        Restore from snapshot
+        
+        Returns: Number of restored nodes
+        """
+        content_path = f"/snapshots/{name}/content.jsonl"
+        node = self.store.get_node(content_path)
+        
+        if not node:
+            raise ValueError(f"Snapshot not found: {name}")
+        
+        return self.import_jsonl(node.content)
 
 
 # ═══════════════════════════════════════════════════════════════

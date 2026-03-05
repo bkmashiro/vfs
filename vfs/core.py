@@ -449,3 +449,46 @@ class VFS:
             time_range=time_range,
             limit=limit
         )
+    
+    def sync(self, target: str, prefix: str = "/memory") -> Dict[str, int]:
+        """
+        同步到远程
+        
+        Args:
+            target: 目录路径或 s3://bucket/prefix
+            prefix: 要同步的路径前缀
+        """
+        from .advanced import SyncManager
+        
+        sync_mgr = SyncManager(self.store)
+        
+        if target.startswith("s3://"):
+            # S3 sync
+            parts = target[5:].split("/", 1)
+            bucket = parts[0]
+            s3_prefix = parts[1] if len(parts) > 1 else "vfs/"
+            return sync_mgr.sync_to_s3(bucket, s3_prefix, prefix)
+        else:
+            # Directory sync
+            return sync_mgr.sync_to_directory(target, prefix)
+    
+    def snapshot(self, name: str = None) -> str:
+        """创建快照"""
+        from .advanced import ExportManager
+        
+        export_mgr = ExportManager(self.store)
+        return export_mgr.snapshot(name)
+    
+    def list_snapshots(self) -> List[Dict]:
+        """列出快照"""
+        from .advanced import ExportManager
+        
+        export_mgr = ExportManager(self.store)
+        return export_mgr.list_snapshots()
+    
+    def restore_snapshot(self, name: str) -> int:
+        """恢复快照"""
+        from .advanced import ExportManager
+        
+        export_mgr = ExportManager(self.store)
+        return export_mgr.restore_snapshot(name)

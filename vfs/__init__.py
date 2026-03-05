@@ -21,7 +21,8 @@ from .advanced import (
     SubscriptionManager, MemoryEvent, EventType,
     MemoryDecay, MemoryCompactor, CompactionResult,
     SemanticDeduplicator, DedupeResult,
-    DerivedLinkManager, TimeQuery
+    DerivedLinkManager, TimeQuery,
+    TagManager, AccessStats, ExportManager, SyncManager
 )
 
 __all__ = [
@@ -60,4 +61,8 @@ __all__ = [
     "DedupeResult",
     "DerivedLinkManager",
     "TimeQuery",
+    "TagManager",
+    "AccessStats",
+    "ExportManager",
+    "SyncManager",
 ]
