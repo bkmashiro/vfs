@@ -2,17 +2,29 @@
 
 让 AI Agent 通过文件路径读写结构化知识。
 
+```
+Bot ←→ vfs read/write ←→ VFSStore ←→ SQLite + FTS5
+                              ↓
+                         Providers
+                    (Alpaca, Yahoo, RSS)
+```
+
 ## 设计理念
 
 - **对 Bot 接口是"文件"**：路径 + 内容，简单直观
 - **内部是结构化存储**：SQLite + FTS5 + 关系图
 - **权限硬编码**：`/memory` 可写，`/research` `/live` 只读
+- **TTL 缓存**：`/live` 路径自动刷新过期数据
+- **版本追踪**：每次写入保存 diff
 
 ## 安装
 
 ```bash
 cd ~/.openclaw/workspace/vfs
 pip install -e .
+
+# 验证安装
+vfs stats
 ```
 
 ## 使用
@@ -106,9 +118,86 @@ Bot ←→ VFS CLI ←→ VFSStore ←→ SQLite
 - `AlpacaPositionsProvider`: 从 Alpaca 获取持仓数据 → `/live/positions.md`
 - `MemoryProvider`: Bot 记忆区 → `/memory/*`
 
+## Providers
+
+| Provider | 路径 | 数据源 | TTL |
+|----------|------|--------|-----|
+| AlpacaPositionsProvider | `/live/positions.md` | Alpaca API | 60s |
+| AlpacaOrdersProvider | `/live/orders.md` | Alpaca API | 30s |
+| TechnicalIndicatorsProvider | `/live/indicators/AAPL.md` | Yahoo Finance | 300s |
+| NewsProvider | `/live/news/market.md` | RSS (Yahoo, CoinDesk) | 600s |
+| WatchlistProvider | `/live/watchlist.md` | Yahoo Finance | 300s |
+| MemoryProvider | `/memory/*` | Bot 写入 | - |
+
+### 技术指标
+
+```bash
+vfs read /live/indicators/NVDA.md
+```
+
+输出包括：
+- RSI (14) + 超买/超卖信号
+- MACD + 金叉/死叉
+- SMA/EMA 移动平均线
+- 布林带 + %B
+- ATR 波动率
+
+### 自选股概览
+
+```bash
+vfs read /live/watchlist.md        # 默认（SPY, QQQ, AAPL...）
+vfs read /live/watchlist/tech.md   # 科技股
+vfs read /live/watchlist/crypto.md # 加密相关股
+```
+
+## 批量操作
+
+```bash
+# 导入目录
+vfs import ./reports --prefix /research --pattern "**/*.md"
+
+# 导出所有节点
+vfs export / --output backup.json
+
+# 自动发现关系
+vfs auto-link --by symbol
+```
+
+## Python API
+
+```python
+from vfs import VFSStore, VFSNode
+
+store = VFSStore()
+
+# 读取
+node = store.get_node("/memory/lesson.md")
+print(node.content)
+
+# 写入
+new_node = VFSNode(path="/memory/new.md", content="Hello")
+store.put_node(new_node)
+
+# 搜索
+results = store.search("RSI oversold")
+for node, score in results:
+    print(f"{node.path}: {score}")
+
+# 关系
+store.add_edge("/research/AAPL.md", "/research/MSFT.md", EdgeType.PEER)
+links = store.get_links("/research/AAPL.md")
+```
+
+## 测试
+
+```bash
+pytest tests/ -v
+# 33 passed
+```
+
 ## TODO
 
-- [ ] sqlite-vec 向量搜索
-- [ ] 更多 provider（新闻、财报、技术指标）
-- [ ] 批量导入
-- [ ] 过期数据清理
+- [ ] sqlite-vec 向量语义搜索
+- [ ] 更多 provider（财报、宏观数据）
+- [ ] MCP server 接入
+- [ ] 过期数据自动清理
