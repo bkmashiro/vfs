@@ -2,6 +2,39 @@
 
 A config-driven virtual filesystem for AI agents to read/write structured knowledge.
 
+## Why You Need AVM
+
+**The Problem:** LLMs forget everything between sessions. Context windows are limited. RAG retrieves chunks, not structured knowledge.
+
+**AVM solves this:**
+
+| Challenge | Without AVM | With AVM |
+|-----------|-------------|----------|
+| **Memory persistence** | Gone after session | Permanent, queryable |
+| **Context limits** | 128K tokens, then truncate | Token-aware recall, fit any budget |
+| **Knowledge structure** | Flat vector chunks | Linked graph, typed relationships |
+| **Multi-agent** | Shared DB, no isolation | Private + shared namespaces |
+| **Discovery** | Need exact keywords | Browse, explore, timeline |
+
+**Real examples:**
+
+```python
+# Trading agent remembers across sessions
+trader.remember("NVDA RSI at 72, overbought", importance=0.9, tags=["market"])
+# 3 months later...
+trader.recall("what did I observe about NVDA?", max_tokens=500)
+
+# Agent forgets what it knows
+trader.topics()      # "technical: 12, crypto: 8, macro: 5"
+trader.timeline(7)   # "Mon: BTC signal, Tue: Fed notes..."
+
+# Multi-agent collaboration
+analyst.remember("SPY pattern", namespace="shared")
+trader.recall("market patterns")  # sees analyst's shared memory
+```
+
+**One-liner value prop:** *"Persistent, structured, token-aware memory for AI agents."*
+
 <details>
 <summary><b>🎮 See it in action (click to expand)</b></summary>
 
