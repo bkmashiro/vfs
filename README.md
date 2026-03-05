@@ -2,6 +2,91 @@
 
 A config-driven virtual filesystem for AI agents to read/write structured knowledge.
 
+<details>
+<summary><b>🎮 See it in action (click to expand)</b></summary>
+
+```
+    ╔═══════════════════════════════════════════════════════════╗
+    ║     █████╗ ██╗   ██╗███╗   ███╗                          ║
+    ║    ██╔══██╗██║   ██║████╗ ████║                          ║
+    ║    ███████║██║   ██║██╔████╔██║                          ║
+    ║    ██╔══██║╚██╗ ██╔╝██║╚██╔╝██║                          ║
+    ║    ██║  ██║ ╚████╔╝ ██║ ╚═╝ ██║                          ║
+    ║    AI Virtual Memory - Playground                         ║
+    ╚═══════════════════════════════════════════════════════════╝
+
+============================================================
+  1. BASIC READ/WRITE
+============================================================
+✓ Written: /memory/lessons/risk_management.md
+✓ Written: /memory/market/NVDA_analysis.md
+
+📌 Read content:
+   # Risk Management Rules
+   ## Position Sizing
+   - Never risk more than 2% of portfolio on a single trade
+   - Use stop-loss orders religiously
+
+============================================================
+  2. FULL-TEXT SEARCH
+============================================================
+📌 Search: 'RSI overbought':
+   [0.85] /memory/lessons/risk_management.md
+   [0.72] /memory/market/NVDA_analysis.md
+
+============================================================
+  3. KNOWLEDGE GRAPH (LINKING)
+============================================================
+✓ Linked: NVDA_analysis → risk_management (related)
+
+📌 Links from risk_management.md:
+   → /memory/market/NVDA_analysis.md (related)
+
+============================================================
+  4. AGENT MEMORY (TOKEN-AWARE RECALL)
+============================================================
+✓ Remembered: NVDA warning (importance: 0.9)
+✓ Remembered: BTC observation (importance: 0.7)
+
+📌 Recall: 'NVDA risk' (max 500 tokens):
+   ## Relevant Memory (2 items, ~120 tokens)
+   [/memory/private/trader/nvda_warning.md] (0.92)
+   NVDA showing weakness. RSI at 72, reduce exposure.
+
+============================================================
+  5. MULTI-AGENT ISOLATION
+============================================================
+✓ Analyst stored: SPY pattern (private to analyst)
+
+📌 Trader tries to recall analyst's memory:
+   Cannot access - private to analyst
+
+📌 Trader stats: Private: 3
+📌 Analyst stats: Private: 1
+
+============================================================
+  6. METADATA & TAGS
+============================================================
+📌 Tag Cloud:
+   market: 2, nvda: 1, warning: 1, btc: 1
+
+📌 Memories tagged 'market':
+   /memory/private/trader/nvda_warning.md
+   /memory/private/trader/btc_observation.md
+
+============================================================
+  DEMO COMPLETE 🎉
+============================================================
+```
+
+**Run it yourself:**
+```bash
+pip install -e .
+python playground.py
+```
+
+</details>
+
 ## Features
 
 - **FUSE Mount** - Mount as filesystem, use `ls`, `cat`, `echo`
