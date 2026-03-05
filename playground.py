@@ -284,11 +284,11 @@ trader.remember(
     
     console.print("Recall memories with token budget (perfect for LLM context):\n")
     
-    show_code('context = trader.recall("NVDA risk", max_tokens=500)')
+    show_code('context = trader.recall("NVDA", max_tokens=500)')
     
-    context = trader.recall("market overview", max_tokens=800)
+    context = trader.recall("NVDA", max_tokens=500)
     
-    show_result("Recall Result (max 800 tokens)", context, "green")
+    show_result("Recall Result (max 500 tokens)", context, "green")
     
     pause()
     
