@@ -99,16 +99,16 @@ avm-memory:
 
 | Tool | Description |
 |------|-------------|
-| `vfs_recall` | Token-controlled memory retrieval |
-| `vfs_browse` | Get paths + summaries (two-phase) |
-| `vfs_fetch` | Get full content of selected paths |
-| `vfs_remember` | Store memory with tags/importance |
-| `vfs_search` | Full-text search |
-| `vfs_list` | List by prefix |
-| `vfs_read` | Read specific path |
-| `vfs_tags` | Tag cloud |
-| `vfs_recent` | Time-based queries |
-| `vfs_stats` | Statistics |
+| `avm_recall` | Token-controlled memory retrieval |
+| `avm_browse` | Get paths + summaries (two-phase) |
+| `avm_fetch` | Get full content of selected paths |
+| `avm_remember` | Store memory with tags/importance |
+| `avm_search` | Full-text search |
+| `avm_list` | List by prefix |
+| `avm_read` | Read specific path |
+| `avm_tags` | Tag cloud |
+| `avm_recent` | Time-based queries |
+| `avm_stats` | Statistics |
 
 ## Configuration
 

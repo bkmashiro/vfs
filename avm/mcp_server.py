@@ -9,13 +9,13 @@ Usage:
     vfs-mcp --config /path/to/config.yaml
 
 Tools:
-    - vfs_recall: Retrieve relevant memories
-    - vfs_remember: Store new memory
-    - vfs_search: Full-text search
-    - vfs_list: List memories
-    - vfs_read: Read specific memory
-    - vfs_tags: Get tag cloud
-    - vfs_recent: Get recent memories
+    - avm_recall: Retrieve relevant memories
+    - avm_remember: Store new memory
+    - avm_search: Full-text search
+    - avm_list: List memories
+    - avm_read: Read specific memory
+    - avm_tags: Get tag cloud
+    - avm_recent: Get recent memories
 """
 
 import os
@@ -41,24 +41,24 @@ class MCPServer:
         
         # Register tools
         self.tools = {
-            "vfs_recall": self._tool_recall,
-            "vfs_remember": self._tool_remember,
-            "vfs_search": self._tool_search,
-            "vfs_list": self._tool_list,
-            "vfs_read": self._tool_read,
-            "vfs_tags": self._tool_tags,
-            "vfs_recent": self._tool_recent,
-            "vfs_stats": self._tool_stats,
+            "avm_recall": self._tool_recall,
+            "avm_remember": self._tool_remember,
+            "avm_search": self._tool_search,
+            "avm_list": self._tool_list,
+            "avm_read": self._tool_read,
+            "avm_tags": self._tool_tags,
+            "avm_recent": self._tool_recent,
+            "avm_stats": self._tool_stats,
             # Two-phase retrieval
-            "vfs_browse": self._tool_browse,
-            "vfs_fetch": self._tool_fetch,
+            "avm_browse": self._tool_browse,
+            "avm_fetch": self._tool_fetch,
         }
     
     def get_tool_definitions(self) -> List[Dict]:
         """Return tool definitions for MCP"""
         return [
             {
-                "name": "vfs_recall",
+                "name": "avm_recall",
                 "description": "Search and retrieve relevant memories within a token budget. Returns a compact markdown summary of matching memories.",
                 "inputSchema": {
                     "type": "object",
@@ -88,7 +88,7 @@ class MCPServer:
                 }
             },
             {
-                "name": "vfs_remember",
+                "name": "avm_remember",
                 "description": "Store a new memory. Automatically handles deduplication and linking.",
                 "inputSchema": {
                     "type": "object",
@@ -127,7 +127,7 @@ class MCPServer:
                 }
             },
             {
-                "name": "vfs_search",
+                "name": "avm_search",
                 "description": "Full-text search across memories. Returns matching paths and snippets.",
                 "inputSchema": {
                     "type": "object",
@@ -146,7 +146,7 @@ class MCPServer:
                 }
             },
             {
-                "name": "vfs_list",
+                "name": "avm_list",
                 "description": "List memories in a path prefix.",
                 "inputSchema": {
                     "type": "object",
@@ -165,7 +165,7 @@ class MCPServer:
                 }
             },
             {
-                "name": "vfs_read",
+                "name": "avm_read",
                 "description": "Read a specific memory by path.",
                 "inputSchema": {
                     "type": "object",
@@ -179,7 +179,7 @@ class MCPServer:
                 }
             },
             {
-                "name": "vfs_tags",
+                "name": "avm_tags",
                 "description": "Get tag cloud showing tag frequencies.",
                 "inputSchema": {
                     "type": "object",
@@ -193,7 +193,7 @@ class MCPServer:
                 }
             },
             {
-                "name": "vfs_recent",
+                "name": "avm_recent",
                 "description": "Get recent memories within a time range.",
                 "inputSchema": {
                     "type": "object",
@@ -213,7 +213,7 @@ class MCPServer:
                 }
             },
             {
-                "name": "vfs_stats",
+                "name": "avm_stats",
                 "description": "Get memory statistics for the current user.",
                 "inputSchema": {
                     "type": "object",
@@ -221,8 +221,8 @@ class MCPServer:
                 }
             },
             {
-                "name": "vfs_browse",
-                "description": "Browse memories - returns paths and short summaries only (not full content). Use this first to find relevant memories, then use vfs_fetch to get full content of selected paths. Saves tokens for large result sets.",
+                "name": "avm_browse",
+                "description": "Browse memories - returns paths and short summaries only (not full content). Use this first to find relevant memories, then use avm_fetch to get full content of selected paths. Saves tokens for large result sets.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -245,8 +245,8 @@ class MCPServer:
                 }
             },
             {
-                "name": "vfs_fetch",
-                "description": "Fetch full content of specific memory paths. Use after vfs_browse to get complete content of selected memories.",
+                "name": "avm_fetch",
+                "description": "Fetch full content of specific memory paths. Use after avm_browse to get complete content of selected memories.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -414,7 +414,7 @@ class MCPServer:
         
         lines = [
             f"Found {len(result.nodes)} memories for \"{query}\":",
-            f"(Use vfs_fetch to get full content)",
+            f"(Use avm_fetch to get full content)",
             ""
         ]
         
@@ -500,7 +500,7 @@ class MCPServer:
             "result": {
                 "protocolVersion": "2024-11-05",
                 "serverInfo": {
-                    "name": "vfs-memory",
+                    "name": "avm-memory",
                     "version": "0.7.0"
                 },
                 "capabilities": {

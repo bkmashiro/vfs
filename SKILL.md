@@ -1,4 +1,4 @@
-# VFS Memory Skill
+# AVM Memory Skill
 
 AI Virtual Filesystem for structured knowledge management.
 
@@ -27,7 +27,7 @@ vfs-mcp --api-key $VFS_API_KEY
 Add to your MCP config (e.g., `mcp_servers.yaml`):
 
 ```yaml
-vfs-memory:
+avm-memory:
   command: vfs-mcp
   args:
     - --user
@@ -38,7 +38,7 @@ vfs-memory:
 
 ## Tools
 
-### vfs_recall
+### avm_recall
 
 Search and retrieve relevant memories within a token budget.
 
@@ -52,7 +52,7 @@ Search and retrieve relevant memories within a token budget.
 
 Returns compact markdown with matching memories.
 
-### vfs_remember
+### avm_remember
 
 Store a new memory.
 
@@ -65,7 +65,7 @@ Store a new memory.
 }
 ```
 
-### vfs_search
+### avm_search
 
 Full-text search across memories.
 
@@ -76,7 +76,7 @@ Full-text search across memories.
 }
 ```
 
-### vfs_list
+### avm_list
 
 List memories in a path prefix.
 
@@ -87,7 +87,7 @@ List memories in a path prefix.
 }
 ```
 
-### vfs_read
+### avm_read
 
 Read a specific memory by path.
 
@@ -97,7 +97,7 @@ Read a specific memory by path.
 }
 ```
 
-### vfs_tags
+### avm_tags
 
 Get tag frequency distribution.
 
@@ -107,7 +107,7 @@ Get tag frequency distribution.
 }
 ```
 
-### vfs_recent
+### avm_recent
 
 Get recent memories.
 
@@ -118,7 +118,7 @@ Get recent memories.
 }
 ```
 
-### vfs_stats
+### avm_stats
 
 Get memory statistics.
 
@@ -133,20 +133,20 @@ Get memory statistics.
 1. **Recall context before responding:**
    ```
    User: "What's the NVDA situation?"
-   Agent: [calls vfs_recall("NVDA")]
+   Agent: [calls avm_recall("NVDA")]
    → Gets relevant memories about NVDA
    → Formulates response with context
    ```
 
 2. **Store insights for future:**
    ```
-   Agent: [calls vfs_remember("NVDA showing weakness...", tags=["market", "nvda"])]
+   Agent: [calls avm_remember("NVDA showing weakness...", tags=["market", "nvda"])]
    → Memory stored for future recall
    ```
 
 3. **Build knowledge over time:**
    ```
-   Agent: [calls vfs_remember(..., derived_from=["/memory/shared/market/NVDA.md"])]
+   Agent: [calls avm_remember(..., derived_from=["/memory/shared/market/NVDA.md"])]
    → Creates reasoning chain
    ```
 
