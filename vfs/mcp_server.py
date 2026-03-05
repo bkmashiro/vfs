@@ -49,6 +49,9 @@ class MCPServer:
             "vfs_tags": self._tool_tags,
             "vfs_recent": self._tool_recent,
             "vfs_stats": self._tool_stats,
+            # Two-phase retrieval
+            "vfs_browse": self._tool_browse,
+            "vfs_fetch": self._tool_fetch,
         }
     
     def get_tool_definitions(self) -> List[Dict]:
@@ -216,6 +219,45 @@ class MCPServer:
                     "type": "object",
                     "properties": {}
                 }
+            },
+            {
+                "name": "vfs_browse",
+                "description": "Browse memories - returns paths and short summaries only (not full content). Use this first to find relevant memories, then use vfs_fetch to get full content of selected paths. Saves tokens for large result sets.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query"
+                        },
+                        "limit": {
+                            "type": "number",
+                            "description": "Maximum results (default: 10)",
+                            "default": 10
+                        },
+                        "summary_length": {
+                            "type": "number",
+                            "description": "Characters per summary (default: 80)",
+                            "default": 80
+                        }
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "vfs_fetch",
+                "description": "Fetch full content of specific memory paths. Use after vfs_browse to get complete content of selected memories.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "paths": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of paths to fetch"
+                        }
+                    },
+                    "required": ["paths"]
+                }
             }
         ]
     
@@ -357,6 +399,78 @@ class MCPServer:
         ]
         
         return "\n".join(lines)
+    
+    def _tool_browse(self, params: Dict) -> str:
+        """Browse memories - paths and summaries only"""
+        query = params.get("query", "")
+        limit = params.get("limit", 10)
+        summary_length = params.get("summary_length", 80)
+        
+        # Use retrieve for semantic + FTS search
+        result = self.vfs.retrieve(query, k=limit, expand_graph=True)
+        
+        if not result.nodes:
+            return f"No memories found for: {query}"
+        
+        lines = [
+            f"Found {len(result.nodes)} memories for \"{query}\":",
+            f"(Use vfs_fetch to get full content)",
+            ""
+        ]
+        
+        for node in result.nodes:
+            score = result.get_score(node.path)
+            source = result.get_source(node.path)
+            
+            # Create short summary
+            content = node.content.replace("\n", " ").strip()
+            # Skip markdown headers and metadata
+            content = ' '.join([
+                line for line in content.split()
+                if not line.startswith('#') and not line.startswith('*')
+            ])
+            summary = content[:summary_length]
+            if len(content) > summary_length:
+                summary += "..."
+            
+            # Source badge
+            badge = {"semantic": "🎯", "fts": "📝", "graph": "🔗"}.get(source, "")
+            
+            lines.append(f"{badge} [{score:.2f}] {node.path}")
+            lines.append(f"    {summary}")
+            
+            # Add tags if present
+            tags = node.meta.get("tags", [])
+            if tags:
+                lines.append(f"    Tags: {', '.join(tags)}")
+            
+            lines.append("")
+        
+        return "\n".join(lines)
+    
+    def _tool_fetch(self, params: Dict) -> str:
+        """Fetch full content of specific paths"""
+        paths = params.get("paths", [])
+        
+        if not paths:
+            return "No paths specified"
+        
+        contents = []
+        not_found = []
+        
+        for path in paths:
+            node = self.vfs.read(path)
+            if node:
+                contents.append(f"## {path}\n\n{node.content}")
+            else:
+                not_found.append(path)
+        
+        result = "\n\n---\n\n".join(contents)
+        
+        if not_found:
+            result += f"\n\n*Not found: {', '.join(not_found)}*"
+        
+        return result
     
     # ─── MCP Protocol ─────────────────────────────────────
     
