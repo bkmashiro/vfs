@@ -492,3 +492,115 @@ class VFS:
         
         export_mgr = ExportManager(self.store)
         return export_mgr.restore_snapshot(name)
+    
+    # ─── Linux-Style Permissions ──────────────────────────
+    
+    def init_permissions(self, config_dict: Dict = None):
+        """
+        初始化 Linux 风格权限系统
+        
+        Args:
+            config_dict: 用户/组配置
+        """
+        from .permissions import UserRegistry, PermissionManager, APIKeyManager
+        
+        self._user_registry = UserRegistry()
+        self._perm_manager = PermissionManager(self._user_registry)
+        self._api_key_manager = APIKeyManager(self._user_registry)
+        
+        if config_dict:
+            self._user_registry.load_from_dict(config_dict)
+    
+    def authenticate(self, api_key: str) -> Optional["User"]:
+        """
+        通过 API Key 认证
+        
+        Returns:
+            User 对象，或 None
+        """
+        if not hasattr(self, '_user_registry'):
+            self.init_permissions()
+        
+        return self._user_registry.authenticate(api_key)
+    
+    def create_user(self, name: str, groups: List[str] = None,
+                    capabilities: List[str] = None) -> "User":
+        """创建用户"""
+        if not hasattr(self, '_user_registry'):
+            self.init_permissions()
+        
+        from .permissions import Capability
+        caps = [Capability(c) for c in (capabilities or [])]
+        
+        return self._user_registry.create_user(name, groups, caps)
+    
+    def get_user(self, name: str) -> Optional["User"]:
+        """获取用户"""
+        if not hasattr(self, '_user_registry'):
+            return None
+        return self._user_registry.get_user(name)
+    
+    def check_permission(self, user: "User", path: str, 
+                         action: str = "read") -> bool:
+        """
+        检查用户权限
+        
+        Args:
+            user: 用户对象
+            path: 路径
+            action: read/write/delete/search
+        """
+        if not hasattr(self, '_perm_manager'):
+            return True  # 没有初始化权限系统则允许
+        
+        from .permissions import NodeOwnership
+        
+        # 获取节点的所有权信息
+        node = self.store.get_node(path)
+        if node:
+            ownership = NodeOwnership.from_meta(node.meta)
+        else:
+            # 默认权限
+            ownership = NodeOwnership(owner="root", group="root", mode=0o644)
+        
+        if action == "read":
+            return self._perm_manager.check_read(user, ownership)
+        elif action == "write":
+            return self._perm_manager.check_write(user, ownership)
+        elif action == "delete":
+            return self._perm_manager.check_delete(user, ownership)
+        elif action == "search":
+            return self._perm_manager.check_search(user, path)
+        
+        return False
+    
+    def sudo(self, user: "User", duration_minutes: int = 5) -> bool:
+        """临时提权"""
+        if not hasattr(self, '_perm_manager'):
+            return False
+        return self._perm_manager.sudo(user, duration_minutes)
+    
+    def create_api_key(self, user: "User", 
+                       paths: List[str] = None,
+                       actions: List[str] = None,
+                       expires_days: int = None) -> str:
+        """
+        创建 API Key（用于 skill 鉴权）
+        
+        Args:
+            user: 用户
+            paths: 允许的路径（支持通配符）
+            actions: 允许的操作
+            expires_days: 过期天数
+        """
+        if not hasattr(self, '_api_key_manager'):
+            self.init_permissions()
+        
+        from .permissions import APIKeyScope
+        
+        scope = APIKeyScope(
+            paths=paths or ["*"],
+            actions=actions or ["read"],
+        )
+        
+        return self._api_key_manager.create_key(user, scope, expires_days)

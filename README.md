@@ -295,8 +295,101 @@ permissions:
 └─────────────────────────────────────────────────────┘
 ```
 
+## Linux-Style Permissions
+
+Unix-like permission system with rwx bits, ownership, and capabilities.
+
+### Setup
+
+```python
+vfs.init_permissions({
+    "users": {
+        "akashi": {
+            "groups": ["trading", "admin"],
+            "capabilities": ["search_all", "write", "delete", "sudo"]
+        },
+        "yuze": {
+            "groups": ["secretary"],
+            "capabilities": ["search_own", "write"]
+        },
+        "guest": {
+            "groups": [],
+            "capabilities": []
+        }
+    }
+})
+```
+
+### Node Ownership
+
+```python
+from vfs import NodeOwnership, mode_to_string
+
+# Each node has owner, group, and mode
+ownership = NodeOwnership(
+    owner="akashi",
+    group="trading",
+    mode=0o750  # rwxr-x---
+)
+
+print(mode_to_string(0o750))  # "rwxr-x---"
+```
+
+### Permission Checks
+
+```python
+akashi = vfs.get_user("akashi")
+yuze = vfs.get_user("yuze")
+
+# Check permissions
+ownership.can_read(akashi)   # True (owner)
+ownership.can_write(akashi)  # True (owner has w)
+ownership.can_read(yuze)     # False (not in group, other has ---)
+```
+
+### Capabilities
+
+| Capability | Description |
+|------------|-------------|
+| `CAP_ADMIN` | Full system access |
+| `CAP_SEARCH_ALL` | Search any path |
+| `CAP_SEARCH_OWN` | Search only own paths |
+| `CAP_WRITE` | Write to allowed paths |
+| `CAP_DELETE` | Delete files |
+| `CAP_SHARE` | Share with others |
+| `CAP_SUDO` | Temporary privilege elevation |
+
+### Sudo
+
+```python
+# Temporarily elevate privileges
+akashi = vfs.get_user("akashi")
+vfs.sudo(akashi, duration_minutes=5)
+```
+
+### API Keys (for Skills)
+
+```python
+# Create scoped API key for skill authentication
+key = vfs.create_api_key(
+    user=akashi,
+    paths=["/memory/shared/*"],
+    actions=["read", "write"],
+    expires_days=30
+)
+
+# Authenticate in skill
+user = vfs.authenticate(key)
+if user:
+    # Proceed with user's permissions
+    pass
+```
+
 ## Versions
 
+- **v0.7.0** - Linux-style permissions (rwx, ownership, capabilities, API keys)
+- **v0.6.0** - Advanced features (10 features including sync, tags, export)
+- **v0.5.0** - Multi-agent support (append-only, audit log)
 - **v0.4.0** - Agent Memory (token-aware recall)
 - **v0.3.0** - Linked Retrieval + Document Synthesis
 - **v0.2.0** - Config-driven providers/permissions

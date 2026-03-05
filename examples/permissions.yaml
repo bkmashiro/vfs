@@ -1,0 +1,79 @@
+# Linux-Style Permission Configuration
+#
+# This file defines users, groups, and capabilities for the VFS permission system.
+# Use with: vfs.init_permissions(yaml.safe_load(open("permissions.yaml")))
+
+users:
+  # Root user (always exists, uid=0)
+  # Just customize capabilities if needed
+  root:
+    capabilities:
+      - admin
+  
+  # Admin user with full access
+  akashi:
+    groups:
+      - trading
+      - admin
+    capabilities:
+      - search_all
+      - write
+      - delete
+      - share
+      - sudo
+      - audit
+      - export
+  
+  # Secretary with limited write access
+  yuze:
+    groups:
+      - secretary
+      - research
+    capabilities:
+      - search_own
+      - write
+      - share
+  
+  # Trading bot
+  trader:
+    groups:
+      - trading
+    capabilities:
+      - search_own
+      - write
+  
+  # Read-only guest
+  guest:
+    groups: []
+    capabilities: []
+    generate_api_key: false
+
+groups:
+  admin:
+    members:
+      - akashi
+  
+  trading:
+    members:
+      - akashi
+      - trader
+  
+  secretary:
+    members:
+      - yuze
+  
+  research:
+    members:
+      - yuze
+
+# Default file modes:
+# 0o644 (rw-r--r--) - Owner read/write, others read
+# 0o640 (rw-r-----) - Owner read/write, group read
+# 0o600 (rw-------) - Owner only
+# 0o755 (rwxr-xr-x) - Directories
+# 0o750 (rwxr-x---) - Private directories
+
+# Permission mapping by path:
+# /memory/private/{user}/* -> owner={user}, mode=0o700
+# /memory/shared/*         -> owner=root, group=users, mode=0o775
+# /snapshots/*             -> owner=root, mode=0o644

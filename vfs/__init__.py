@@ -5,7 +5,7 @@ AI Virtual Filesystem (VFS)
 配置驱动，支持自定义 provider 和权限规则。
 """
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 from .node import VFSNode
 from .graph import KVGraph
@@ -23,6 +23,12 @@ from .advanced import (
     SemanticDeduplicator, DedupeResult,
     DerivedLinkManager, TimeQuery,
     TagManager, AccessStats, ExportManager, SyncManager
+)
+from .permissions import (
+    User, Group, Capability, PermBits,
+    NodeOwnership, UserRegistry, PermissionManager,
+    APIKeyScope, APIKeyManager,
+    mode_to_string, string_to_mode
 )
 
 __all__ = [
@@ -65,4 +71,16 @@ __all__ = [
     "AccessStats",
     "ExportManager",
     "SyncManager",
+    # Permissions
+    "User",
+    "Group", 
+    "Capability",
+    "PermBits",
+    "NodeOwnership",
+    "UserRegistry",
+    "PermissionManager",
+    "APIKeyScope",
+    "APIKeyManager",
+    "mode_to_string",
+    "string_to_mode",
 ]
