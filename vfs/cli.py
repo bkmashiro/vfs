@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-vfs/cli.py - VFS命令行接口
+vfs/cli.py - VFS 命令行接口
+
+配置驱动的虚拟文件系统 CLI
 
 用法:
-    vfs read /research/MSFT.md
+    vfs read /market/indicators/AAPL.md
     vfs write /memory/lesson.md --content "今天学到..."
+    vfs search "RSI oversold"
     vfs links /research/MSFT.md
-    vfs search "能源板块超卖"
     vfs stats
 """
 
@@ -16,90 +18,29 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from .store import VFSStore
+from .core import VFS
+from .config import load_config
 from .node import VFSNode, NodeType
 from .graph import EdgeType
 
 
-def get_store(db_path: Optional[str] = None) -> VFSStore:
-    """获取存储实例"""
-    return VFSStore(db_path)
-
-
-def _load_alpaca_env():
-    """加载 Alpaca 配置"""
-    env_path = Path.home() / ".openclaw" / "workspace" / "trading" / ".env"
-    if env_path.exists():
-        return dict(
-            line.split("=", 1) 
-            for line in env_path.read_text().splitlines() 
-            if "=" in line
-        )
-    return None
-
-
-def _get_provider(store, path, force_refresh=False):
-    """根据路径获取对应的 provider 并获取节点"""
-    from .providers import (
-        AlpacaPositionsProvider, AlpacaOrdersProvider,
-        TechnicalIndicatorsProvider, NewsProvider
-    )
-    
-    # Alpaca positions
-    if path.startswith("/live/positions"):
-        env = _load_alpaca_env()
-        if not env:
-            return None, "Alpaca credentials not found"
-        provider = AlpacaPositionsProvider(
-            store,
-            api_key=env.get("ALPACA_API_KEY", ""),
-            secret_key=env.get("ALPACA_SECRET_KEY", ""),
-            base_url=env.get("ALPACA_BASE_URL", "https://paper-api.alpaca.markets"),
-        )
-        return provider.get(path, force_refresh=force_refresh), None
-    
-    # Alpaca orders
-    if path.startswith("/live/orders"):
-        env = _load_alpaca_env()
-        if not env:
-            return None, "Alpaca credentials not found"
-        provider = AlpacaOrdersProvider(
-            store,
-            api_key=env.get("ALPACA_API_KEY", ""),
-            secret_key=env.get("ALPACA_SECRET_KEY", ""),
-            base_url=env.get("ALPACA_BASE_URL", "https://paper-api.alpaca.markets"),
-        )
-        return provider.get(path, force_refresh=force_refresh), None
-    
-    # Technical indicators
-    if path.startswith("/live/indicators"):
-        provider = TechnicalIndicatorsProvider(store)
-        return provider.get(path, force_refresh=force_refresh), None
-    
-    # News
-    if path.startswith("/live/news"):
-        provider = NewsProvider(store)
-        return provider.get(path, force_refresh=force_refresh), None
-    
-    # Watchlist
-    if path.startswith("/live/watchlist"):
-        from .providers import WatchlistProvider
-        provider = WatchlistProvider(store)
-        return provider.get(path, force_refresh=force_refresh), None
-    
-    # Default: direct store access
-    return store.get_node(path), None
+def get_vfs(config_path: Optional[str] = None, db_path: Optional[str] = None) -> VFS:
+    """获取 VFS 实例"""
+    config = load_config(config_path)
+    if db_path:
+        config.db_path = db_path
+    return VFS(config)
 
 
 def cmd_read(args):
     """读取节点"""
-    store = get_store(args.db)
+    vfs = get_vfs(args.config, args.db)
     path = args.path
     
-    node, error = _get_provider(store, path, force_refresh=args.refresh)
-    
-    if error:
-        print(f"Error: {error}", file=sys.stderr)
+    try:
+        node = vfs.read(path, force_refresh=args.refresh)
+    except PermissionError as e:
+        print(f"Permission denied: {e}", file=sys.stderr)
         return 1
     
     if node is None:
@@ -122,13 +63,8 @@ def cmd_read(args):
 
 def cmd_write(args):
     """写入节点"""
-    store = get_store(args.db)
+    vfs = get_vfs(args.config, args.db)
     path = args.path
-    
-    # 检查权限
-    if not path.startswith("/memory"):
-        print(f"Error: Cannot write to {path} (only /memory/* is writable)", file=sys.stderr)
-        return 1
     
     # 获取内容
     if args.content:
@@ -143,14 +79,11 @@ def cmd_write(args):
     if args.meta:
         meta = json.loads(args.meta)
     
-    node = VFSNode(
-        path=path,
-        content=content,
-        meta=meta,
-        node_type=NodeType.FILE,
-    )
-    
-    saved = store.put_node(node)
+    try:
+        saved = vfs.write(path, content, meta)
+    except PermissionError as e:
+        print(f"Permission denied: {e}", file=sys.stderr)
+        return 1
     
     if args.json:
         print(json.dumps(saved.to_dict(), indent=2, default=str))
@@ -162,26 +95,26 @@ def cmd_write(args):
 
 def cmd_delete(args):
     """删除节点"""
-    store = get_store(args.db)
+    vfs = get_vfs(args.config, args.db)
     path = args.path
     
-    if not path.startswith("/memory"):
-        print(f"Error: Cannot delete {path} (only /memory/* is deletable)", file=sys.stderr)
-        return 1
-    
-    if store.delete_node(path):
-        print(f"Deleted: {path}")
-        return 0
-    else:
-        print(f"Not found: {path}", file=sys.stderr)
+    try:
+        if vfs.delete(path):
+            print(f"Deleted: {path}")
+            return 0
+        else:
+            print(f"Not found: {path}", file=sys.stderr)
+            return 1
+    except PermissionError as e:
+        print(f"Permission denied: {e}", file=sys.stderr)
         return 1
 
 
 def cmd_list(args):
     """列出节点"""
-    store = get_store(args.db)
+    vfs = get_vfs(args.config, args.db)
     
-    nodes = store.list_nodes(args.prefix, limit=args.limit)
+    nodes = vfs.list(args.prefix, limit=args.limit)
     
     if args.json:
         print(json.dumps([n.to_dict() for n in nodes], indent=2, default=str))
@@ -195,10 +128,10 @@ def cmd_list(args):
 
 def cmd_links(args):
     """查看节点关联"""
-    store = get_store(args.db)
+    vfs = get_vfs(args.config, args.db)
     path = args.path
     
-    edges = store.get_links(path, direction=args.direction)
+    edges = vfs.links(path, direction=args.direction)
     
     if args.json:
         print(json.dumps([
@@ -225,10 +158,10 @@ def cmd_links(args):
 
 def cmd_link(args):
     """添加关联"""
-    store = get_store(args.db)
+    vfs = get_vfs(args.config, args.db)
     
     edge_type = EdgeType(args.type)
-    edge = store.add_edge(args.source, args.target, edge_type, args.weight)
+    edge = vfs.link(args.source, args.target, edge_type, args.weight)
     
     print(f"Added: {edge}")
     return 0
@@ -236,9 +169,9 @@ def cmd_link(args):
 
 def cmd_search(args):
     """全文搜索"""
-    store = get_store(args.db)
+    vfs = get_vfs(args.config, args.db)
     
-    results = store.search(args.query, limit=args.limit)
+    results = vfs.search(args.query, limit=args.limit)
     
     if args.json:
         print(json.dumps([
@@ -260,9 +193,9 @@ def cmd_search(args):
 
 def cmd_history(args):
     """查看变更历史"""
-    store = get_store(args.db)
+    vfs = get_vfs(args.config, args.db)
     
-    diffs = store.get_history(args.path, limit=args.limit)
+    diffs = vfs.history(args.path, limit=args.limit)
     
     if args.json:
         print(json.dumps([d.to_dict() for d in diffs], indent=2, default=str))
@@ -278,9 +211,9 @@ def cmd_history(args):
 
 def cmd_stats(args):
     """存储统计"""
-    store = get_store(args.db)
+    vfs = get_vfs(args.config, args.db)
     
-    stats = store.stats()
+    stats = vfs.stats()
     
     if args.json:
         print(json.dumps(stats, indent=2))
@@ -303,8 +236,8 @@ def cmd_import(args):
     """导入文件"""
     from .tools import VFSImporter
     
-    store = get_store(args.db)
-    importer = VFSImporter(store)
+    vfs = get_vfs(args.config, args.db)
+    importer = VFSImporter(vfs.store)
     source = Path(args.source)
     
     if source.is_file():
@@ -331,8 +264,8 @@ def cmd_export(args):
     """导出节点"""
     from .tools import VFSExporter
     
-    store = get_store(args.db)
-    exporter = VFSExporter(store)
+    vfs = get_vfs(args.config, args.db)
+    exporter = VFSExporter(vfs.store)
     
     if args.format == "json":
         data = exporter.export_to_json(args.prefix, args.output)
@@ -354,8 +287,8 @@ def cmd_autolink(args):
     """自动发现关系"""
     from .tools import RelationBuilder
     
-    store = get_store(args.db)
-    builder = RelationBuilder(store)
+    vfs = get_vfs(args.config, args.db)
+    builder = RelationBuilder(vfs.store)
     
     total = 0
     
@@ -375,32 +308,36 @@ def cmd_autolink(args):
 
 def cmd_refresh(args):
     """刷新 live 节点"""
-    from .refresh import RefreshManager, refresh_all_providers
-    
-    store = get_store(args.db)
+    vfs = get_vfs(args.config, args.db)
     
     if args.all:
-        print("Refreshing all providers...")
-        stats = refresh_all_providers(store)
-        for prefix, count in stats.items():
-            print(f"  {prefix}: {count} nodes")
-        print(f"Done.")
+        print("Refreshing all live nodes...")
+        nodes = vfs.list("/live", limit=1000)
+        count = 0
+        for node in nodes:
+            try:
+                refreshed = vfs.read(node.path, force_refresh=True)
+                if refreshed:
+                    count += 1
+                    print(f"  {node.path}")
+            except Exception as e:
+                print(f"  {node.path} - Error: {e}")
+        print(f"Refreshed {count} nodes")
     elif args.path:
-        # 单个路径刷新（通过 read --refresh）
-        node, error = _get_provider(store, args.path, force_refresh=True)
-        if error:
-            print(f"Error: {error}", file=sys.stderr)
-            return 1
-        if node:
-            print(f"Refreshed: {node.path} (v{node.version})")
-        else:
-            print(f"Not found: {args.path}", file=sys.stderr)
+        try:
+            node = vfs.read(args.path, force_refresh=True)
+            if node:
+                print(f"Refreshed: {node.path} (v{node.version})")
+            else:
+                print(f"Not found: {args.path}", file=sys.stderr)
+                return 1
+        except PermissionError as e:
+            print(f"Permission denied: {e}", file=sys.stderr)
             return 1
     else:
         # 列出过期节点
-        from .refresh import RefreshManager
-        manager = RefreshManager(store)
-        expired = manager.get_expired()
+        nodes = vfs.list("/live", limit=1000)
+        expired = [n for n in nodes if n.is_expired]
         
         if expired:
             print(f"Expired nodes ({len(expired)}):")
@@ -412,12 +349,37 @@ def cmd_refresh(args):
     return 0
 
 
+def cmd_config(args):
+    """显示配置"""
+    vfs = get_vfs(args.config, args.db)
+    
+    if args.json:
+        print(json.dumps(vfs.config.to_dict(), indent=2))
+    else:
+        print("VFS Configuration")
+        print("=================")
+        print()
+        print("Providers:")
+        for p in vfs.config.providers:
+            print(f"  {p.pattern} -> {p.type} (ttl={p.ttl}s)")
+        print()
+        print("Permissions:")
+        for r in vfs.config.permissions:
+            print(f"  {r.pattern} -> {r.access}")
+        print()
+        print(f"Default access: {vfs.config.default_access}")
+        print(f"Default TTL: {vfs.config.default_ttl}s")
+    
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="AI Virtual Filesystem",
+        description="AI Virtual Filesystem (config-driven)",
         prog="vfs"
     )
-    parser.add_argument("--db", help="Database path (default: ~/.openclaw/vfs/vfs.db)")
+    parser.add_argument("--config", "-c", help="Config file path")
+    parser.add_argument("--db", help="Database path override")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -425,12 +387,12 @@ def main():
     # read
     p_read = subparsers.add_parser("read", help="Read a node")
     p_read.add_argument("path", help="Node path")
-    p_read.add_argument("--refresh", action="store_true", help="Force refresh (for live nodes)")
-    p_read.add_argument("--meta", action="store_true", help="Show metadata")
+    p_read.add_argument("--refresh", "-r", action="store_true", help="Force refresh")
+    p_read.add_argument("--meta", "-m", action="store_true", help="Show metadata")
     p_read.set_defaults(func=cmd_read)
     
     # write
-    p_write = subparsers.add_parser("write", help="Write a node (only /memory/*)")
+    p_write = subparsers.add_parser("write", help="Write a node")
     p_write.add_argument("path", help="Node path")
     p_write.add_argument("--content", "-c", help="Content to write")
     p_write.add_argument("--file", "-f", help="Read content from file")
@@ -438,7 +400,7 @@ def main():
     p_write.set_defaults(func=cmd_write)
     
     # delete
-    p_delete = subparsers.add_parser("delete", help="Delete a node (only /memory/*)")
+    p_delete = subparsers.add_parser("delete", help="Delete a node")
     p_delete.add_argument("path", help="Node path")
     p_delete.set_defaults(func=cmd_delete)
     
@@ -484,14 +446,14 @@ def main():
     p_import = subparsers.add_parser("import", help="Import files")
     p_import.add_argument("source", help="Local file or directory")
     p_import.add_argument("--prefix", "-p", default="/research", help="VFS path prefix")
-    p_import.add_argument("--pattern", default="**/*.md", help="Glob pattern (for directories)")
-    p_import.add_argument("--flatten", action="store_true", help="Flatten directory structure")
+    p_import.add_argument("--pattern", default="**/*.md", help="Glob pattern")
+    p_import.add_argument("--flatten", action="store_true", help="Flatten directory")
     p_import.set_defaults(func=cmd_import)
     
     # export
     p_export = subparsers.add_parser("export", help="Export nodes")
-    p_export.add_argument("prefix", nargs="?", default="/", help="Path prefix to export")
-    p_export.add_argument("--output", "-o", help="Output path (file for JSON, dir for files)")
+    p_export.add_argument("prefix", nargs="?", default="/", help="Path prefix")
+    p_export.add_argument("--output", "-o", help="Output path")
     p_export.add_argument("--format", "-f", choices=["json", "files"], default="json")
     p_export.set_defaults(func=cmd_export)
     
@@ -504,8 +466,12 @@ def main():
     # refresh
     p_refresh = subparsers.add_parser("refresh", help="Refresh live nodes")
     p_refresh.add_argument("path", nargs="?", help="Path to refresh")
-    p_refresh.add_argument("--all", "-a", action="store_true", help="Refresh all providers")
+    p_refresh.add_argument("--all", "-a", action="store_true", help="Refresh all")
     p_refresh.set_defaults(func=cmd_refresh)
+    
+    # config
+    p_config = subparsers.add_parser("config", help="Show configuration")
+    p_config.set_defaults(func=cmd_config)
     
     args = parser.parse_args()
     
@@ -513,6 +479,8 @@ def main():
         return args.func(args)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
+        if args.json:
+            print(json.dumps({"error": str(e)}), file=sys.stderr)
         return 1
 
 
