@@ -90,7 +90,9 @@ class VFSStore:
     
     def __init__(self, db_path: str = None):
         if db_path is None:
-            db_path = str(Path.home() / ".openclaw" / "vfs" / "vfs.db")
+            # Default: use XDG data home or ~/.local/share/vfs
+            xdg_data = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
+            db_path = str(Path(xdg_data) / "vfs" / "vfs.db")
         
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
