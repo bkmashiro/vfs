@@ -239,11 +239,20 @@ echo "New insight" > /mnt/avm/memory/log.md
 cat /mnt/avm/memory/lesson.md:meta      # Metadata (JSON)
 cat /mnt/avm/memory/lesson.md:links     # Related nodes
 cat /mnt/avm/memory/lesson.md:tags      # Tags
+cat /mnt/avm/memory/lesson.md:ttl       # Time-to-live
 cat /mnt/avm/memory/lesson.md:history   # Version history
 cat /mnt/avm/memory/:list               # Directory listing
+cat '/mnt/avm/memory/:list?limit=10'    # Paginated
+cat '/mnt/avm/memory/:list?tag=work'    # Filter by tag
+cat '/mnt/avm/memory/:changes?minutes=5' # Recent changes
 cat /mnt/avm/memory/:stats              # Statistics
 cat "/mnt/avm/:search?q=RSI"            # Search
 cat "/mnt/avm/:recall?q=NVDA"           # Token-aware recall
+
+# Shortcuts - quick access via @xxx prefix
+cat /mnt/avm/memory/:list               # Shows: @abc  lesson.md  Risk management...
+cat /mnt/avm/@abc                       # Access file by shortcut
+cat /mnt/avm/@abc:meta                  # Works with suffixes too
 ```
 
 ### MCP Server
@@ -391,9 +400,18 @@ Access metadata via special suffixes:
 |--------|------|-------|
 | `:meta` | JSON metadata | Update metadata |
 | `:links` | Related nodes | Add links |
-| `:tags` | Tags | Set tags |
-| `:history` | Change history | - |
+| `:tags` | Tags (comma-separated) | Set tags |
+| `:shared` | Shared-with agents | Set agents |
+| `:ttl` | Time remaining | Set expiration (5m/2h/1d/never) |
+| `:history` | Change history (version, time, type) | - |
+| `:path` | Relative path | - |
+| `:info` | Available suffixes | - |
+| `:data` | Raw content | - |
 | `:list` | Directory listing | - |
+| `:list?limit=N&offset=M` | Paginated listing | - |
+| `:list?q=keyword` | Search + list | - |
+| `:list?tag=xxx` | Filter by tag | - |
+| `:changes?minutes=N` | Recently modified files | - |
 | `:stats` | Statistics | - |
 | `:search?q=` | Search results | - |
 | `:recall?q=` | Token-aware recall | - |
