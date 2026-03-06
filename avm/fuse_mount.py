@@ -262,9 +262,10 @@ class AVMFuse(Operations):
             history = self.vfs.history(real_path, limit=10)
             lines = []
             for h in history:
-                ts = h.get('timestamp', '')[:19]
-                change = h.get('change_type', 'update')
-                lines.append(f"[{ts}] {change}")
+                ts = h.changed_at.strftime('%Y-%m-%d %H:%M') if h.changed_at else '?'
+                change = h.change_type or 'update'
+                ver = f"v{h.version}" if h.version else ''
+                lines.append(f"[{ts}] {change} {ver}")
             return '\n'.join(lines) + '\n' if lines else '(no history)\n'
         
         elif suffix == ':list':
