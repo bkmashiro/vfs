@@ -193,6 +193,7 @@ class AVMDaemon:
         # Setup signal handlers
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
+        signal.signal(signal.SIGHUP, self._handle_reload)
         
         # Wait for stop
         try:
@@ -225,6 +226,32 @@ class AVMDaemon:
         # Remove PID file
         if DAEMON_PID.exists():
             DAEMON_PID.unlink()
+    
+    def _handle_reload(self, signum, frame):
+        """Handle reload signal (SIGHUP)"""
+        print("\nReloading configuration...")
+        
+        # Reload config
+        new_config = DaemonConfig.load()
+        
+        # Find what changed
+        current_paths = set(self.mounts.keys())
+        new_paths = set(m.path for m in new_config.mounts if m.enabled)
+        
+        # Stop removed mounts
+        for path in current_paths - new_paths:
+            print(f"  Stopping: {path}")
+            self.mounts[path].stop()
+            del self.mounts[path]
+        
+        # Start new mounts
+        for m in new_config.mounts:
+            if m.enabled and m.path not in current_paths:
+                print(f"  Starting: {m.path}")
+                self._start_mount(m)
+        
+        self.config = new_config
+        print(f"Reload complete. Mounts: {len(self.mounts)}")
     
     def add_mount(self, path: str, agent: str):
         """Add a mount configuration"""
@@ -462,6 +489,24 @@ def cmd_remove(args):
     return 0
 
 
+def cmd_reload(args):
+    """Reload configuration (send SIGHUP to daemon)"""
+    if not DAEMON_PID.exists():
+        print("Daemon not running")
+        return 1
+    
+    pid = int(DAEMON_PID.read_text().strip())
+    try:
+        os.kill(pid, signal.SIGHUP)
+        print(f"Sent reload signal to daemon (pid={pid})")
+        print("Daemon will reload config and update mounts")
+        return 0
+    except ProcessLookupError:
+        print("Daemon not running (stale pid)")
+        DAEMON_PID.unlink()
+        return 1
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="AVM Unified Daemon",
@@ -478,6 +523,10 @@ def main():
     # stop
     stop_parser = subparsers.add_parser("stop", help="Stop daemon")
     stop_parser.set_defaults(func=cmd_stop)
+    
+    # reload
+    reload_parser = subparsers.add_parser("reload", help="Reload configuration")
+    reload_parser.set_defaults(func=cmd_reload)
     
     # status
     status_parser = subparsers.add_parser("status", help="Show status")
