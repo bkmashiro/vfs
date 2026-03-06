@@ -371,7 +371,9 @@ class AVMFuse(Operations):
                     entries.append(name)
                     # Add virtual suffixes for files (on-demand)
                     if '.' in name:  # Likely a file
-                        entries.append(f"{name}:meta")  # Always show meta
+                        # :meta only if has metadata beyond system fields
+                        if node.meta:
+                            entries.append(f"{name}:meta")
                         # :links only if has links
                         try:
                             links = self.vfs.links(node.path, direction="both")
