@@ -124,12 +124,16 @@ class MountProcess:
             Path(self.mountpoint).mkdir(parents=True, exist_ok=True)
             
             # Run FUSE (blocks until unmounted)
+            # Disable caching for virtual files that change dynamically
             FUSE(
                 AVMFuse(agent_avm, self.agent_id),
                 self.mountpoint,
                 nothreads=True,
                 foreground=True,
                 allow_other=False,
+                attr_timeout=0,
+                entry_timeout=0,
+                direct_io=True,  # Bypass kernel page cache
             )
         except Exception as e:
             print(f"FUSE error for {self.mountpoint}: {e}", file=sys.stderr)
