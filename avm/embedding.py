@@ -63,49 +63,65 @@ class OpenAIEmbedding(EmbeddingBackend):
     
     def embeend(self, text: str) -> List[float]:
         import urllib.request
+        import time
         
         data = json.dumps({
             "input": text[:8000],  # truncate
             "model": self.model,
         }).encode()
         
-        req = urllib.request.Request(
-            "https://api.openai.com/v1/embeddings",
-            data=data,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            }
-        )
-        
-        with urllib.request.urlopen(req, timeout=30) as r:
-            result = json.loads(r.read())
-        
-        return result["data"][0]["embedding"]
+        for attempt in range(3):
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/embeddings",
+                data=data,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                }
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    result = json.loads(r.read())
+                return result["data"][0]["embedding"]
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt < 2:
+                    wait = 5 * (attempt + 1)  # 5s, 10s backoff
+                    print(f"Rate limited, waiting {wait}s...")
+                    time.sleep(wait)
+                    continue
+                raise
     
     def embeend_batch(self, texts: List[str]) -> List[List[float]]:
         import urllib.request
+        import time
         
         data = json.dumps({
             "input": [t[:8000] for t in texts],
             "model": self.model,
         }).encode()
         
-        req = urllib.request.Request(
-            "https://api.openai.com/v1/embeddings",
-            data=data,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            }
-        )
-        
-        with urllib.request.urlopen(req, timeout=60) as r:
-            result = json.loads(r.read())
-        
-        # Sort by index
-        embeddings = sorted(result["data"], key=lambda x: x["index"])
-        return [e["embedding"] for e in embeddings]
+        for attempt in range(3):
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/embeddings",
+                data=data,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                }
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    result = json.loads(r.read())
+                # Sort by index
+                embeddings = sorted(result["data"], key=lambda x: x["index"])
+                return [e["embedding"] for e in embeddings]
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt < 2:
+                    wait = 5 * (attempt + 1)
+                    print(f"Rate limited, waiting {wait}s...")
+                    time.sleep(wait)
+                    continue
+                raise
 
 
 class LocalEmbedding(EmbeddingBackend):
@@ -156,15 +172,26 @@ class EmbeddingStore:
     def _init_table(self):
         """initializevectortable"""
         with self.store._conn() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS embeddings (
-                    path TEXT PRIMARY KEY,
-                    vector BLOB NOT NULL,
-                    content_h TEXT,
-                    model TEXT,
-                    updated_at TEXT
-                )
-            """)
+            # Check if table exists
+            exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='embeddings'"
+            ).fetchone()
+            
+            if not exists:
+                conn.execute("""
+                    CREATE TABLE embeddings (
+                        path TEXT PRIMARY KEY,
+                        vector BLOB NOT NULL,
+                        content_h TEXT,
+                        model TEXT,
+                        updated_at TEXT
+                    )
+                """)
+            else:
+                # Migration: add content_h if missing
+                cols = [r[1] for r in conn.execute("PRAGMA table_info(embeddings)")]
+                if 'content_h' not in cols:
+                    conn.execute("ALTER TABLE embeddings ADD COLUMN content_h TEXT")
     
     def _serialize_vector(self, vec: List[float]) -> bytes:
         """serializevector bytes"""
