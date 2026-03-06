@@ -221,6 +221,29 @@ Override with `--db`:
 avm-mcp --db /path/to/custom.db
 ```
 
+## Index Handler
+
+For semi-structured data (projects, code files):
+
+```bash
+# Scan project
+cat /index/project/myapp:scan
+
+# Check file status
+cat /index/project/myapp:status
+# [25 clean, 2 dirty, 1 missing]
+
+# Extract code signatures
+cat /index/code/myapp:scan
+cat /index/code/myapp:sigs
+# ## main.py
+# def calculate_rsi(prices):
+# async def fetch_data(symbol):
+
+# Watch for changes (5 min)
+echo "300" > /index/code/myapp:watch
+```
+
 ## More Info
 
 - Wiki: https://github.com/aivmem/avm/wiki
