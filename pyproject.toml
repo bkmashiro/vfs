@@ -21,11 +21,10 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = ["pyyaml>=6.0", "rich>=13.0"]
+dependencies = ["pyyaml>=6.0", "rich>=13.0", "fusepy>=3.0"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov"]
-fuse = ["fusepy>=3.0"]
 
 [project.scripts]
 avm = "avm.cli:main"
