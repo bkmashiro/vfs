@@ -55,7 +55,7 @@ class AVMFuse(Operations):
     """
     
     # Virtual node suffixes
-    VIRTUAL_SUFFIXES = {':meta', ':links', ':tags', ':history'}
+    VIRTUAL_SUFFIXES = {':meta', ':links', ':tags', ':history', ':shared'}
     VIRTUAL_DIR_FILES = {':list', ':stats'}
     VIRTUAL_QUERY_PATTERNS = {':search', ':recall'}
     
@@ -102,6 +102,24 @@ class AVMFuse(Operations):
         _, suffix, _ = self._parse_path(path)
         return suffix is not None
     
+    def _can_see_shared(self, node) -> bool:
+        """Check if current agent can see this shared node."""
+        if not self.user:
+            return True  # Admin mode
+        
+        # Only filter /memory/shared/ paths
+        if not node.path.startswith("/memory/shared/"):
+            return True
+        
+        # Check shared_with in metadata
+        shared_with = node.meta.get("shared_with", [])
+        
+        # Empty or contains "all" = everyone can see
+        if not shared_with or "all" in shared_with:
+            return True
+        
+        return self.user in shared_with
+    
     def _get_virtual_content(self, real_path: str, suffix: str, params: dict) -> str:
         """Generate content for virtual nodes."""
         
@@ -129,6 +147,15 @@ class AVMFuse(Operations):
                 raise FuseOSError(errno.ENOENT)
             tags = node.meta.get('tags', [])
             return ','.join(tags) + '\n' if tags else '\n'
+        
+        elif suffix == ':shared':
+            node = self.vfs.read(real_path)
+            if not node:
+                raise FuseOSError(errno.ENOENT)
+            shared_with = node.meta.get('shared_with', [])
+            if not shared_with:
+                return 'all\n'
+            return ','.join(shared_with) + '\n'
         
         elif suffix == ':history':
             history = self.vfs.history(real_path, limit=10)
@@ -206,6 +233,21 @@ class AVMFuse(Operations):
                     target = parts[0]
                     rel_type = parts[1] if len(parts) > 1 else 'related'
                     self.vfs.link(real_path, target, rel_type)
+            return True
+        
+        elif suffix == ':shared':
+            # Format: agent1,agent2,... or "all"
+            node = self.vfs.read(real_path)
+            if not node:
+                raise FuseOSError(errno.ENOENT)
+            
+            agents = content.strip()
+            if agents == 'all' or not agents:
+                node.meta['shared_with'] = []
+            else:
+                node.meta['shared_with'] = [a.strip() for a in agents.split(',')]
+            
+            self.vfs.write(real_path, node.content, meta=node.meta)
             return True
         
         return False
@@ -306,6 +348,10 @@ class AVMFuse(Operations):
         seen = set()
         
         for node in nodes:
+            # Filter by shared_with permission
+            if not self._can_see_shared(node):
+                continue
+            
             # Get relative name
             if node.path.startswith(real_path):
                 rel = node.path[len(real_path):].lstrip('/')
@@ -319,6 +365,7 @@ class AVMFuse(Operations):
                         entries.append(f"{name}:meta")
                         entries.append(f"{name}:links")
                         entries.append(f"{name}:tags")
+                        entries.append(f"{name}:shared")
         
         return entries
     
@@ -332,6 +379,9 @@ class AVMFuse(Operations):
             node = self.vfs.read(real_path)
             if not node:
                 raise FuseOSError(errno.ENOENT)
+            # Check shared permission
+            if not self._can_see_shared(node):
+                raise FuseOSError(errno.EACCES)
             content = node.content or ''
         
         encoded = content.encode('utf-8')
