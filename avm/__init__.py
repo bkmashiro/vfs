@@ -50,6 +50,13 @@ from .index_handler import (
     register_scan_hook,
     SCAN_HOOKS,
 )
+from .config_handler import (
+    ConfigHandler,
+    ConfigStore,
+    MetaHandler,
+    DEFAULT_SETTINGS,
+    deep_merge,
+)
 from .permissions import (
     User, Group, Capability, PermBits,
     NodeOwnership, UserRegistry, PermissionManager,
