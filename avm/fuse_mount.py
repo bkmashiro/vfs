@@ -55,9 +55,9 @@ class AVMFuse(Operations):
     """
     
     # Virtual node suffixes
-    VIRTUAL_SUFFIXES = {':meta', ':links', ':tags', ':history', ':shared', ':data', ':info', ':path'}
+    VIRTUAL_SUFFIXES = {':meta', ':links', ':tags', ':history', ':shared', ':data', ':info', ':path', ':ttl'}
     VIRTUAL_DIR_FILES = {':list', ':stats'}
-    VIRTUAL_QUERY_PATTERNS = {':search', ':recall'}
+    VIRTUAL_QUERY_PATTERNS = {':search', ':recall', ':changes'}
     
     def __init__(self, vfs, user=None):
         self.vfs = vfs
@@ -176,6 +176,31 @@ class AVMFuse(Operations):
             # Return path relative to mount point (without leading /)
             rel_path = real_path.lstrip('/')
             return f"{rel_path}\n"
+        
+        if suffix == ':ttl':
+            node = self.vfs.read(real_path)
+            if not node:
+                raise FuseOSError(errno.ENOENT)
+            expires_at = node.meta.get('expires_at')
+            if not expires_at:
+                return 'never\n'
+            from datetime import datetime
+            try:
+                exp_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                remaining = exp_dt - datetime.utcnow()
+                if remaining.total_seconds() <= 0:
+                    return 'expired\n'
+                # Format as human readable
+                mins = int(remaining.total_seconds() / 60)
+                if mins < 60:
+                    return f'{mins}m\n'
+                hours = mins // 60
+                if hours < 24:
+                    return f'{hours}h {mins % 60}m\n'
+                days = hours // 24
+                return f'{days}d {hours % 24}h\n'
+            except (ValueError, TypeError):
+                return 'invalid\n'
         
         if suffix == ':info':
             # List available virtual suffixes for this file
@@ -316,6 +341,52 @@ class AVMFuse(Operations):
             else:
                 return '(no user context for recall)\n'
         
+        elif suffix == ':changes':
+            # Return recently modified files
+            # :changes?since=ISO_TIMESTAMP or :changes?minutes=N
+            since = params.get('since', '') if params else ''
+            minutes = int(params.get('minutes', 60)) if params else 60
+            limit = int(params.get('limit', 20)) if params else 20
+            
+            from datetime import datetime, timedelta
+            
+            if since:
+                try:
+                    since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
+                except ValueError:
+                    since_dt = datetime.utcnow() - timedelta(minutes=minutes)
+            else:
+                since_dt = datetime.utcnow() - timedelta(minutes=minutes)
+            
+            # Get all nodes and filter by updated_at
+            nodes = self.vfs.list(real_path, limit=500)
+            changed = []
+            for node in nodes:
+                if not self._can_see_shared(node):
+                    continue
+                try:
+                    updated = node.updated_at
+                    if updated and updated >= since_dt:
+                        changed.append((node, updated))
+                except (AttributeError, TypeError):
+                    pass
+            
+            # Sort by update time (newest first)
+            changed.sort(key=lambda x: x[1], reverse=True)
+            
+            lines = []
+            for node, updated in changed[:limit]:
+                shortcut = node.meta.get('shortcut', '???')
+                filename = node.path.split('/')[-1]
+                if len(filename) > 25:
+                    filename = filename[:22] + '...'
+                time_str = updated.strftime('%H:%M')
+                lines.append(f"@{shortcut}  {time_str}  {filename}")
+            
+            if not lines:
+                return '(no changes)\n'
+            return '\n'.join(lines) + '\n'
+        
         return ''
     
     def _set_virtual_content(self, real_path: str, suffix: str, content: str) -> bool:
@@ -353,6 +424,42 @@ class AVMFuse(Operations):
                     target = parts[0]
                     rel_type = parts[1] if len(parts) > 1 else 'related'
                     self.vfs.link(real_path, target, rel_type)
+            return True
+        
+        elif suffix == ':ttl':
+            # Format: Nm (minutes), Nh (hours), Nd (days), or "never"
+            node = self.vfs.read(real_path)
+            if not node:
+                raise FuseOSError(errno.ENOENT)
+            
+            ttl_str = content.strip().lower()
+            from datetime import datetime, timedelta
+            
+            if ttl_str == 'never' or not ttl_str:
+                if 'expires_at' in node.meta:
+                    del node.meta['expires_at']
+            else:
+                # Parse duration
+                try:
+                    if ttl_str.endswith('m'):
+                        minutes = int(ttl_str[:-1])
+                        delta = timedelta(minutes=minutes)
+                    elif ttl_str.endswith('h'):
+                        hours = int(ttl_str[:-1])
+                        delta = timedelta(hours=hours)
+                    elif ttl_str.endswith('d'):
+                        days = int(ttl_str[:-1])
+                        delta = timedelta(days=days)
+                    else:
+                        # Assume minutes
+                        delta = timedelta(minutes=int(ttl_str))
+                    
+                    expires_at = datetime.utcnow() + delta
+                    node.meta['expires_at'] = expires_at.isoformat()
+                except ValueError:
+                    raise FuseOSError(errno.EINVAL)
+            
+            self.vfs.write(real_path, node.content, meta=node.meta)
             return True
         
         elif suffix == ':shared':
@@ -523,6 +630,16 @@ class AVMFuse(Operations):
             # Check shared permission
             if not self._can_see_shared(node):
                 raise FuseOSError(errno.EACCES)
+            # Check TTL expiration
+            expires_at = node.meta.get('expires_at')
+            if expires_at:
+                from datetime import datetime
+                try:
+                    exp_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                    if datetime.utcnow() >= exp_dt:
+                        raise FuseOSError(errno.ENOENT)  # Expired = not found
+                except (ValueError, TypeError):
+                    pass
             content = node.content or ''
         
         encoded = content.encode('utf-8')
