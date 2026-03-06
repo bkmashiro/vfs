@@ -21,12 +21,95 @@ Usage:
 
 import json
 import time
+import re
+import threading
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Any, Callable
 from abc import ABC, abstractmethod
 
 from .handlers import BaseHandler, handler
+
+
+# ─── Extractors ─────────────────────────────────────────────
+
+EXTRACTORS: Dict[str, Callable[[Path], str]] = {}
+
+
+def extractor(extension: str):
+    """Decorator to register a file extractor."""
+    def decorator(func: Callable[[Path], str]):
+        EXTRACTORS[extension] = func
+        return func
+    return decorator
+
+
+@extractor(".py")
+def extract_python(path: Path) -> str:
+    """Extract Python function/class signatures."""
+    signatures = []
+    try:
+        for line in path.read_text(errors='ignore').split('\n'):
+            stripped = line.lstrip()
+            if stripped.startswith(('def ', 'async def ', 'class ')):
+                signatures.append(line[:100].rstrip())
+    except Exception:
+        pass
+    return '\n'.join(signatures)
+
+
+@extractor(".js")
+def extract_javascript(path: Path) -> str:
+    """Extract JavaScript function signatures."""
+    signatures = []
+    patterns = [
+        r'^\s*(async\s+)?function\s+\w+',
+        r'^\s*(const|let|var)\s+\w+\s*=\s*(async\s+)?\(',
+        r'^\s*(const|let|var)\s+\w+\s*=\s*(async\s+)?\w+\s*=>',
+        r'^\s*(export\s+)?(async\s+)?function',
+    ]
+    try:
+        for line in path.read_text(errors='ignore').split('\n'):
+            for pattern in patterns:
+                if re.match(pattern, line):
+                    signatures.append(line[:100].rstrip())
+                    break
+    except Exception:
+        pass
+    return '\n'.join(signatures)
+
+
+@extractor(".ts")
+def extract_typescript(path: Path) -> str:
+    """Extract TypeScript function signatures."""
+    return extract_javascript(path)  # Similar patterns
+
+
+@extractor(".go")
+def extract_go(path: Path) -> str:
+    """Extract Go function signatures."""
+    signatures = []
+    try:
+        for line in path.read_text(errors='ignore').split('\n'):
+            if re.match(r'^func\s+', line):
+                signatures.append(line[:100].rstrip())
+    except Exception:
+        pass
+    return '\n'.join(signatures)
+
+
+@extractor(".rs")
+def extract_rust(path: Path) -> str:
+    """Extract Rust function signatures."""
+    signatures = []
+    try:
+        for line in path.read_text(errors='ignore').split('\n'):
+            stripped = line.lstrip()
+            if re.match(r'(pub\s+)?(async\s+)?fn\s+', stripped):
+                signatures.append(line[:100].rstrip())
+    except Exception:
+        pass
+    return '\n'.join(signatures)
 
 
 # ─── Index Data Models ─────────────────────────────────────
@@ -129,7 +212,7 @@ class ScanHook(ABC):
 
 
 class ProjectScanHook(ScanHook):
-    """Scan a project directory."""
+    """Scan a project directory with pluggable extractors."""
     
     # File patterns to ignore
     IGNORE_PATTERNS = {
@@ -144,6 +227,14 @@ class ProjectScanHook(ScanHook):
         ".md", ".txt", ".yaml", ".yml", ".json", ".toml",
         ".sh", ".bash", ".zsh"
     }
+    
+    def __init__(self, extractors: List[str] = None):
+        """
+        Args:
+            extractors: List of extensions to extract signatures from.
+                       None means use all available extractors.
+        """
+        self.enabled_extractors = extractors  # e.g., [".py", ".go"]
     
     def scan(self, root: str, name: str = None, **kwargs) -> IndexEntry:
         root_path = Path(root).expanduser().resolve()
@@ -163,10 +254,18 @@ class ProjectScanHook(ScanHook):
                 continue
             
             rel_path = str(f.relative_to(root_path))
+            
+            # Extract signatures if extractor available
+            description = ""
+            ext = f.suffix.lower()
+            if ext in EXTRACTORS:
+                if self.enabled_extractors is None or ext in self.enabled_extractors:
+                    description = EXTRACTORS[ext](f)
+            
             files.append(FileEntry(
                 path=rel_path,
                 mtime=f.stat().st_mtime,
-                description="",  # Agent fills later
+                description=description,
             ))
         
         return IndexEntry(
@@ -180,12 +279,106 @@ class ProjectScanHook(ScanHook):
 # Hook registry
 SCAN_HOOKS: Dict[str, ScanHook] = {
     "project": ProjectScanHook(),
+    "code": ProjectScanHook(extractors=[".py", ".js", ".ts", ".go", ".rs"]),
 }
 
 
 def register_scan_hook(name: str, hook: ScanHook):
     """Register a custom scan hook."""
     SCAN_HOOKS[name] = hook
+
+
+# ─── Index Watcher ─────────────────────────────────────────────
+
+class IndexWatcher:
+    """Watch for file changes and auto-rescan."""
+    
+    _watchers: Dict[str, "IndexWatcher"] = {}
+    
+    def __init__(self, store: "IndexStore", index_type: str, name: str, 
+                 interval: float = 5.0):
+        self.store = store
+        self.index_type = index_type
+        self.name = name
+        self.interval = interval
+        self._running = False
+        self._thread: Optional[threading.Thread] = None
+        self._end_time: float = 0
+        self._updates: int = 0
+    
+    @classmethod
+    def get(cls, index_type: str, name: str) -> Optional["IndexWatcher"]:
+        key = f"{index_type}/{name}"
+        return cls._watchers.get(key)
+    
+    def start(self, duration: float = 300):
+        """Start watching for duration seconds."""
+        if self._running:
+            # Extend duration
+            self._end_time = time.time() + duration
+            return
+        
+        self._running = True
+        self._end_time = time.time() + duration
+        self._updates = 0
+        
+        key = f"{self.index_type}/{self.name}"
+        IndexWatcher._watchers[key] = self
+        
+        self._thread = threading.Thread(target=self._watch_loop, daemon=True)
+        self._thread.start()
+    
+    def stop(self):
+        """Stop watching."""
+        self._running = False
+        key = f"{self.index_type}/{self.name}"
+        IndexWatcher._watchers.pop(key, None)
+    
+    def status(self) -> str:
+        """Get watch status."""
+        if not self._running:
+            return "Not watching"
+        
+        remaining = max(0, self._end_time - time.time())
+        mins, secs = divmod(int(remaining), 60)
+        return f"Watching: {mins}m{secs}s remaining, {self._updates} updates"
+    
+    def _watch_loop(self):
+        """Background watch loop."""
+        while self._running and time.time() < self._end_time:
+            try:
+                entry = self.store.get(self.index_type, self.name)
+                if entry:
+                    status = entry.check_status()
+                    dirty = [p for p, s in status.items() if s == "dirty"]
+                    
+                    if dirty:
+                        # Rescan dirty files
+                        self._rescan_dirty(entry, dirty)
+                        self._updates += 1
+            except Exception:
+                pass
+            
+            time.sleep(self.interval)
+        
+        self.stop()
+    
+    def _rescan_dirty(self, entry: IndexEntry, dirty_paths: List[str]):
+        """Rescan dirty files and update entry."""
+        root = Path(entry.root).expanduser()
+        
+        for file_entry in entry.files:
+            if file_entry.path in dirty_paths:
+                full_path = root / file_entry.path
+                if full_path.exists():
+                    file_entry.mtime = full_path.stat().st_mtime
+                    
+                    # Re-extract if applicable
+                    ext = full_path.suffix.lower()
+                    if ext in EXTRACTORS:
+                        file_entry.description = EXTRACTORS[ext](full_path)
+        
+        self.store.save(self.index_type, entry)
 
 
 # ─── Index Store ─────────────────────────────────────────────
@@ -301,7 +494,7 @@ class IndexHandler(BaseHandler):
         
         # Check for suffix
         suffix = None
-        for s in (":status", ":scan", ":files", ":json"):
+        for s in (":status", ":scan", ":files", ":json", ":watch", ":sigs"):
             if name_part.endswith(s):
                 name_part = name_part[:-len(s)]
                 suffix = s
@@ -338,7 +531,17 @@ class IndexHandler(BaseHandler):
             project_root = str(Path(root).expanduser() / name)
             entry = hook.scan(project_root, name=name)
             self.store.save(index_type, entry)
-            return f"Scanned: {len(entry.files)} files indexed"
+            
+            # Count files with signatures
+            with_sigs = sum(1 for f in entry.files if f.description)
+            return f"Scanned: {len(entry.files)} files, {with_sigs} with signatures"
+        
+        if suffix == ":watch":
+            # Get watch status
+            watcher = IndexWatcher.get(index_type, name)
+            if watcher:
+                return watcher.status()
+            return "Not watching"
         
         if not entry:
             return f"Index '{index_type}/{name}' not found. Use :scan to create."
@@ -349,6 +552,15 @@ class IndexHandler(BaseHandler):
             return "\n".join(f.path for f in entry.files)
         elif suffix == ":json":
             return json.dumps(entry.to_dict(), indent=2, default=str)
+        elif suffix == ":sigs":
+            # Show only files with signatures
+            lines = []
+            for f in entry.files:
+                if f.description:
+                    lines.append(f"## {f.path}")
+                    lines.append(f.description)
+                    lines.append("")
+            return "\n".join(lines) if lines else "(no signatures extracted)"
         else:
             return entry.to_readable()
     
@@ -361,6 +573,30 @@ class IndexHandler(BaseHandler):
         if suffix == ":scan":
             # Trigger scan on write
             self.read(path, context)
+            return True
+        
+        if suffix == ":watch":
+            # Start/stop watch
+            content = content.strip().lower()
+            
+            if content in ("stop", "off", "0"):
+                watcher = IndexWatcher.get(index_type, name)
+                if watcher:
+                    watcher.stop()
+                return True
+            
+            # Start watching
+            try:
+                duration = float(content) if content else 300
+            except ValueError:
+                duration = 300
+            
+            entry = self.store.get(index_type, name)
+            if not entry:
+                return False
+            
+            watcher = IndexWatcher(self.store, index_type, name)
+            watcher.start(duration)
             return True
         
         # Update entry
