@@ -1,14 +1,18 @@
 {
   "name": "avm",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "description": "AI Virtual Memory - Token-aware recall, knowledge graphs, multi-agent memory sharing",
   "author": "aivmem",
   "repository": "https://github.com/aivmem/avm",
-  "keywords": ["memory", "recall", "knowledge-graph", "multi-agent", "fuse"],
+  "keywords": ["memory", "recall", "knowledge-graph", "multi-agent", "fuse", "mcp"],
   "install": {
     "commands": [
       "pip install avm"
     ],
     "verify": "avm --version"
+  },
+  "mcp": {
+    "command": "avm-mcp",
+    "args": ["--user", "${AGENT_ID:-default}"]
   }
 }
