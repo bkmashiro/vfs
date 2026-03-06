@@ -520,9 +520,11 @@ def cmd_telemetry(args):
         else:
             for e in entries:
                 status = "✓" if e['success'] else "✗"
-                tokens = f"{e['tokens_in'] or '-'}/{e['tokens_out'] or '-'}"
+                tokens_in = str(e['tokens_in']) if e['tokens_in'] else "-"
+                tokens_out = str(e['tokens_out']) if e['tokens_out'] else "-"
+                tokens = f"{tokens_in:>4}/{tokens_out:<4}"
                 latency = f"{e['latency_ms']:.0f}ms" if e['latency_ms'] else "-"
-                print(f"{status} [{e['ts'][:19]}] {e['op']:10} {e['agent']:12} {tokens:12} {latency}")
+                print(f"{status} [{e['ts'][:19]}] {e['op']:<8} {e['agent']:<15} {tokens} {latency:>5}")
 
 
 def cmd_savings(args):
