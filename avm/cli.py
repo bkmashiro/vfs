@@ -235,78 +235,7 @@ def cmd_stats(args):
     return 0
 
 
-def cmd_import(args):
-    """importfile"""
-    from .tools import VFSImporter
-    
-    vfs = get_vfs(args.config, args.db)
-    importer = VFSImporter(vfs.store)
-    source = Path(args.source)
-    
-    if source.is_file():
-        node = importer.import_file(str(source), f"{args.prefix}/{source.name}")
-        print(f"Imported: {node.path}")
-    elif source.is_dir():
-        nodes = importer.import_directory(
-            str(source),
-            args.prefix,
-            pattern=args.pattern,
-            flatten=args.flatten,
-        )
-        print(f"Imported {len(nodes)} files")
-        for node in nodes:
-            print(f"  {node.path}")
-    else:
-        print(f"Not found: {source}", file=sys.stderr)
-        return 1
-    
-    return 0
 
-
-def cmd_export(args):
-    """exportnode"""
-    from .tools import VFSExporter
-    
-    vfs = get_vfs(args.config, args.db)
-    exporter = VFSExporter(vfs.store)
-    
-    if args.format == "json":
-        data = exporter.export_to_json(args.prefix, args.output)
-        if not args.output:
-            print(json.dumps(data, indent=2, default=str))
-        else:
-            print(f"Exported {len(data)} nodes to {args.output}")
-    else:
-        if not args.output:
-            print("Error: --output required for files format", file=sys.stderr)
-            return 1
-        count = exporter.export_to_directory(args.prefix, args.output)
-        print(f"Exported {count} files to {args.output}")
-    
-    return 0
-
-
-def cmd_autolink(args):
-    """auto-discoverrelation"""
-    from .tools import RelationBuilder
-    
-    vfs = get_vfs(args.config, args.db)
-    builder = RelationBuilder(vfs.store)
-    
-    total = 0
-    
-    if args.by in ("symbol", "all"):
-        count = builder.auto_link_by_symbol(args.prefix)
-        print(f"Symbol-based links: {count}")
-        total += count
-    
-    if args.by in ("tag", "all"):
-        count = builder.link_by_tags()
-        print(f"Tag-based links: {count}")
-        total += count
-    
-    print(f"Total links added: {total}")
-    return 0
 
 
 def cmd_refresh(args):
@@ -615,26 +544,7 @@ def main():
     p_stats = subparsers.add_parser("stats", help="Show storage stats")
     p_stats.set_defaults(func=cmd_stats)
     
-    # import
-    p_import = subparsers.add_parser("import", help="Import files")
-    p_import.add_argument("source", help="Local file or directory")
-    p_import.add_argument("--prefix", "-p", default="/research", help="VFS path prefix")
-    p_import.add_argument("--pattern", default="**/*.md", help="Glob pattern")
-    p_import.add_argument("--flatten", action="store_true", help="Flatten directory")
-    p_import.set_defaults(func=cmd_import)
-    
-    # export
-    p_export = subparsers.add_parser("export", help="Export nodes")
-    p_export.add_argument("prefix", nargs="?", default="/", help="Path prefix")
-    p_export.add_argument("--output", "-o", help="Output path")
-    p_export.add_argument("--format", "-f", choices=["json", "files"], default="json")
-    p_export.set_defaults(func=cmd_export)
-    
-    # auto-link
-    p_autolink = subparsers.add_parser("auto-link", help="Auto-discover relationships")
-    p_autolink.add_argument("--prefix", "-p", default="/", help="Path prefix")
-    p_autolink.add_argument("--by", choices=["symbol", "tag", "all"], default="all")
-    p_autolink.set_defaults(func=cmd_autolink)
+
     
     # refresh
     p_refresh = subparsers.add_parser("refresh", help="Refresh live nodes")
