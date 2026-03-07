@@ -160,7 +160,7 @@ python playground.py
 - **MCP Server** - Integrate with AI agents via MCP protocol
 - **Agent Memory** - Token-aware recall with scoring strategies
 - **Multi-Agent** - Permissions, quotas, audit logging
-- **Full-Text Search** - FTS5 with semantic search support
+- **Full-Text Search** - FTS5 (English recommended; Chinese lacks tokenizer support)
 
 ## Install
 
