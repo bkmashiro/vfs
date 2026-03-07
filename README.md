@@ -406,16 +406,18 @@ default_access: ro
 | `sqlite` | Database queries |
 | `index` | Structured index with status tracking |
 
-### Index Handler
+### Index Handler (CLI/MCP only)
 
 Track project files and extract code signatures:
 
 ```bash
-cat /index/code/myapp:scan    # Scan with signature extraction
-cat /index/code/myapp:sigs    # Show function signatures
-cat /index/code/myapp:status  # Check clean/dirty/missing
-echo "300" > /index/code/myapp:watch  # Watch for 5 min
+# Via CLI
+avm index scan myapp /path/to/project
+avm index status myapp
+avm index sigs myapp
 ```
+
+> Note: Index handler not exposed via FUSE mount, use CLI or MCP.
 
 ### Custom Handlers
 
