@@ -191,12 +191,12 @@ class AVMFuse(Operations):
             last_version = last_read.get(self.user, 0)
             
             if last_version == 0:
-                # First read - mark and tell them to read full content
+                # First read - return full content
                 if update_markers:
                     last_read[self.user] = current_version
                     node.meta['last_read'] = last_read
                     self.vfs.store.put_node(node, save_diff=False)
-                return f'(first read, marked v{current_version})\n'
+                return f'# (first read, full content)\n{node.content or ""}\n'
             
             if last_version >= current_version:
                 return '(no changes)\n'  # Already up to date, no marker update needed
