@@ -23,6 +23,7 @@ from .core import AVM
 from .retrieval import Retriever
 from .embedding import EmbeddingStore
 from .telemetry import get_telemetry
+from .utils import utcnow
 
 
 class ScoringStrategy(Enum):
@@ -253,7 +254,7 @@ class AgentMemory:
                      strategy: ScoringStrategy) -> List[ScoredNode]:
         """nodescore"""
         scored = []
-        now = datetime.utcnow()
+        now = utcnow()
         
         for node, relevance in candidates:
             sn = ScoredNode(node=node, relevance_score=relevance)
@@ -393,11 +394,11 @@ class AgentMemory:
         if path:
             target_path = path
         elif namespace:
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")  # add microseconds
+            timestamp = utcnow().strftime("%Y%m%d_%H%M%S_%f")  # add microseconds
             slug = self._make_slug(title) if title else timestamp
             target_path = f"{self.shared_prefix}/{namespace}/{slug}.md"
         else:
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")  # add microseconds
+            timestamp = utcnow().strftime("%Y%m%d_%H%M%S_%f")  # add microseconds
             slug = self._make_slug(title) if title else ""
             filename = f"{timestamp}_{slug}.md" if slug else f"{timestamp}.md"
             target_path = f"{self.private_prefix}/{filename}"
@@ -516,7 +517,7 @@ class AgentMemory:
         if title:
             lines.append(f"# {title}")
             lines.append("")
-        lines.append(f"*Created: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*")
+        lines.append(f"*Created: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*")
         if tags:
             lines.append(f"*Tags: {', '.join(tags)}*")
         lines.append("")
@@ -579,7 +580,7 @@ class AgentMemory:
         meta = node.meta.copy()
         meta["shared_from"] = path
         meta["shared_by"] = self.agent_id
-        meta["shared_at"] = datetime.utcnow().isoformat()
+        meta["shared_at"] = utcnow().isoformat()
         
         return self.avm.write(new_path, node.content, meta)
     
@@ -606,7 +607,7 @@ class AgentMemory:
         node = self.avm.read(path)
         if node:
             meta = node.meta.copy()
-            meta["last_accessed"] = datetime.utcnow().isoformat()
+            meta["last_accessed"] = utcnow().isoformat()
             # Update meta only, not content
             self.avm.store._put_node_internal(
                 AVMNode(path=path, content=node.content, meta=meta),
@@ -1086,7 +1087,7 @@ class AgentMemory:
         Returns:
             Timeline of recent memories
         """
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = utcnow() - timedelta(days=days)
         
         nodes = self.avm.query_time(
             prefix="/memory",

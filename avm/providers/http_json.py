@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any
 from .base import LiveProvider
 from ..node import AVMNode
 from ..store import AVMStore
+from ..utils import utcnow
 
 
 class HttpJsonProvider(LiveProvider):
@@ -92,7 +93,7 @@ class HttpJsonProvider(LiveProvider):
             lines.append(str(data))
         
         lines.append("")
-        lines.append(f"*Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*")
+        lines.append(f"*Updated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*")
         
         return "\n".join(lines)
     

@@ -13,6 +13,7 @@ import difflib
 
 from .node import AVMNode, NodeDiff, NodeType
 from .graph import KVGraph, Edge, EdgeType
+from .utils import utcnow
 
 
 # SQLite schema
@@ -159,7 +160,7 @@ class AVMStore:
         with self._conn() as conn:
             existing = self.get_node(node.path)
             
-            now = datetime.utcnow()
+            now = utcnow()
             new_h = node.content_h
             
             if existing:
@@ -362,7 +363,7 @@ class AVMStore:
             """, (
                 source, target, edge_type.value, weight,
                 json.dumps(meta or {}),
-                datetime.utcnow().isoformat(),
+                utcnow().isoformat(),
             ))
         
         return edge

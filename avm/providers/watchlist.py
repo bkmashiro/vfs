@@ -11,6 +11,7 @@ from .base import LiveProvider
 from .indicators import TechnicalIndicatorsProvider
 from ..node import AVMNode
 from ..store import AVMStore
+from ..utils import utcnow
 
 
 class WatchlistProvider(LiveProvider):
@@ -65,7 +66,7 @@ class WatchlistProvider(LiveProvider):
         lines = [
             f"# Watchlist: {name.title()}",
             "",
-            f"*Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
+            f"*Updated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
             "",
             "## Quick Overview",
             "",

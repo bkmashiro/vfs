@@ -14,6 +14,7 @@ import urllib.parse
 from .base import LiveProvider
 from ..node import AVMNode
 from ..store import AVMStore
+from ..utils import utcnow
 
 
 class NewsProvider(LiveProvider):
@@ -105,7 +106,7 @@ class NewsProvider(LiveProvider):
         lines = [
             "# Market News",
             "",
-            f"*Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
+            f"*Updated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
             "",
         ]
         
@@ -137,7 +138,7 @@ class NewsProvider(LiveProvider):
         lines = [
             "# Crypto News",
             "",
-            f"*Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
+            f"*Updated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
             "",
         ]
         
@@ -162,7 +163,7 @@ class NewsProvider(LiveProvider):
         lines = [
             f"# {symbol} News",
             "",
-            f"*Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
+            f"*Updated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
             "",
         ]
         

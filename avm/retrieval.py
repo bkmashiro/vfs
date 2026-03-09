@@ -15,6 +15,7 @@ from .store import AVMStore
 from .node import AVMNode
 from .graph import EdgeType
 from .embedding import EmbeddingStore, EmbeddingBackend
+from .utils import utcnow
 
 
 @dataclass
@@ -44,7 +45,7 @@ class SynthesizedDocument:
     content: str
     sections: List[Dict[str, Any]]
     sources: List[str]
-    generated_at: datetime = field(default_factory=datetime.utcnow)
+    generated_at: datetime = field(default_factory=utcnow)
     
     def to_markdown(self) -> str:
         return self.content
@@ -314,7 +315,7 @@ class DocumentSynthesizer:
         lines = [
             f"# {title}",
             "",
-            f"*Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
+            f"*Generated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
             f"*Query: \"{result.query}\"*",
             "",
         ]

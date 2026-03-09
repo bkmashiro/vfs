@@ -1,5 +1,5 @@
 """
-vfs/node.py - VFSnodedatastructure
+vfs/node.py - VFS node data structure
 """
 
 from dataclasses import dataclass, field
@@ -8,6 +8,8 @@ from typing import Optional, Dict, Any, List
 from enum import Enum
 import hashlib
 import json
+
+from .utils import utcnow
 
 
 class NodeType(Enum):
@@ -38,8 +40,8 @@ class AVMNode:
     content: str = ""
     meta: Dict[str, Any] = field(default_factory=dict)
     node_type: NodeType = NodeType.FILE
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=utcnow)
+    updated_at: datetime = field(default_factory=utcnow)
     version: int = 1
     
     # Permission determined by path prefix
@@ -72,7 +74,7 @@ class AVMNode:
         ttl = self.ttl_seconds
         if ttl is None:
             return False
-        age = (datetime.utcnow() - self.updated_at).total_seconds()
+        age = (utcnow() - self.updated_at).total_seconds()
         return age > ttl
     
     @property
@@ -100,8 +102,8 @@ class AVMNode:
             content=data.get("content", ""),
             meta=data.get("meta", {}),
             node_type=NodeType(data.get("node_type", "file")),
-            created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.utcnow(),
-            updated_at=datetime.fromisoformat(data["updated_at"]) if "updated_at" in data else datetime.utcnow(),
+            created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else utcnow(),
+            updated_at=datetime.fromisoformat(data["updated_at"]) if "updated_at" in data else utcnow(),
             version=data.get("version", 1),
         )
     
@@ -119,7 +121,7 @@ class NodeDiff:
     old_h: Optional[str]
     new_h: str
     diff_content: str  # Unified diff or complete new content
-    changed_at: datetime = field(default_factory=datetime.utcnow)
+    changed_at: datetime = field(default_factory=utcnow)
     change_type: str = "update"  # create/update/delete
     
     def to_dict(self) -> Dict[str, Any]:

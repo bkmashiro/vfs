@@ -9,6 +9,7 @@ from typing import Optional, Any
 from .base import LiveProvider
 from ..node import AVMNode
 from ..store import AVMStore
+from ..utils import utcnow
 
 
 class AlpacaPositionsProvider(LiveProvider):
@@ -97,7 +98,7 @@ class AlpacaPositionsProvider(LiveProvider):
             "",
             f"**Total Unrealized P/L:** ${total_pl:+,.2f}",
             "",
-            f"*Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
+            f"*Updated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
         ])
         
         return self._make_node(
@@ -120,7 +121,7 @@ class AlpacaPositionsProvider(LiveProvider):
             f"- **Portfolio Value:** ${float(account.get('portfolio_value', 0)):,.2f}",
             f"- **Day Trade Count:** {account.get('daytrade_count', 0)}",
             "",
-            f"*Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
+            f"*Updated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
         ]
         
         return self._make_node(
@@ -149,7 +150,7 @@ class AlpacaPositionsProvider(LiveProvider):
             f"- **Unrealized P/L:** ${float(pos['unrealized_pl']):+,.2f}",
             f"- **Unrealized P/L %:** {float(pos['unrealized_plpc'])*100:+.2f}%",
             "",
-            f"*Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
+            f"*Updated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
         ]
         
         return self._make_node(
@@ -231,7 +232,7 @@ class AlpacaOrdersProvider(LiveProvider):
             "",
             f"**Total:** {len(orders)} orders",
             "",
-            f"*Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
+            f"*Updated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
         ])
         
         path = "/live/orders.md" if status == "all" else f"/live/orders/{status}.md"

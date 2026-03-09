@@ -27,6 +27,8 @@ import json
 import argparse
 import re
 from datetime import datetime
+
+from .utils import utcnow
 from typing import Optional, Dict, Any
 from pathlib import Path
 
@@ -267,7 +269,7 @@ class AVMFuse(Operations):
             from datetime import datetime
             try:
                 exp_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
-                remaining = exp_dt - datetime.utcnow()
+                remaining = exp_dt - utcnow()
                 if remaining.total_seconds() <= 0:
                     return 'expired\n'
                 # Format as human readable
@@ -453,9 +455,9 @@ class AVMFuse(Operations):
                 try:
                     since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
                 except ValueError:
-                    since_dt = datetime.utcnow() - timedelta(minutes=minutes)
+                    since_dt = utcnow() - timedelta(minutes=minutes)
             else:
-                since_dt = datetime.utcnow() - timedelta(minutes=minutes)
+                since_dt = utcnow() - timedelta(minutes=minutes)
             
             # Get all nodes and filter by updated_at
             nodes = self.vfs.list(real_path, limit=500)
@@ -570,7 +572,7 @@ class AVMFuse(Operations):
                         # Assume minutes
                         delta = timedelta(minutes=int(ttl_str))
                     
-                    expires_at = datetime.utcnow() + delta
+                    expires_at = utcnow() + delta
                     node.meta['expires_at'] = expires_at.isoformat()
                 except ValueError:
                     raise FuseOSError(errno.EINVAL)
@@ -842,7 +844,7 @@ class AVMFuse(Operations):
                 from datetime import datetime
                 try:
                     exp_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
-                    if datetime.utcnow() >= exp_dt:
+                    if utcnow() >= exp_dt:
                         raise FuseOSError(errno.ENOENT)  # Expired = not found
                 except (ValueError, TypeError):
                     pass

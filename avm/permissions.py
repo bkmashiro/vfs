@@ -18,6 +18,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Set
 from enum import Enum, Flag, auto
 
+from .utils import utcnow
+
 
 # ═══════════════════════════════════════════════════════════════
 # Permission Bits
@@ -116,7 +118,7 @@ class User:
     capabilities: List[Capability] = field(default_factory=list)
     home: str = ""
     api_key: str = ""
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=utcnow)
     
     def __post_init__(self):
         if not self.home:
@@ -424,14 +426,14 @@ class PermissionManager:
         if not user._capability(Capability.CAP_SUDO):
             return False
         
-        expiry = datetime.utcnow() + timedelta(minutes=duration_minutes)
+        expiry = utcnow() + timedelta(minutes=duration_minutes)
         self._sudo_sessions[user.name] = expiry
         return True
     
     def is_sudo(self, user: User) -> bool:
         """Check if user  active sudo session"""
         expiry = self._sudo_sessions.get(user.name)
-        if expiry and expiry > datetime.utcnow():
+        if expiry and expiry > utcnow():
             return True
         return False
     
@@ -505,7 +507,7 @@ class APIKeyManager:
             scope = APIKeyScope()
         
         if expires_days:
-            scope.expires_at = datetime.utcnow() + timedelta(days=expires_days)
+            scope.expires_at = utcnow() + timedelta(days=expires_days)
         
         self._scopes[key] = scope
         self.registry._api_keys[key] = user.name
@@ -522,7 +524,7 @@ class APIKeyManager:
         scope = self._scopes.get(key)
         if scope:
             # Check expiry
-            if scope.expires_at and scope.expires_at < datetime.utcnow():
+            if scope.expires_at and scope.expires_at < utcnow():
                 return None
             
             # Check path

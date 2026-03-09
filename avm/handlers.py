@@ -38,6 +38,8 @@ from typing import Any, Dict, List, Optional, Protocol, Type, Callable
 from datetime import datetime, timedelta
 import importlib
 
+from .utils import utcnow
+
 
 # ─── Provider Protocol ────────────────────────────────────
 
@@ -164,7 +166,7 @@ class BaseHandler(ABC):
         """Get cached content if not expired"""
         if path in self._cache:
             content, expires_at = self._cache[path]
-            if datetime.utcnow() < expires_at:
+            if utcnow() < expires_at:
                 return content
             del self._cache[path]
         return None
@@ -172,7 +174,7 @@ class BaseHandler(ABC):
     def _set_cached(self, path: str, content: str, ttl: int):
         """Cache content with TTL"""
         if ttl > 0:
-            expires_at = datetime.utcnow() + timedelta(seconds=ttl)
+            expires_at = utcnow() + timedelta(seconds=ttl)
             self._cache[path] = (content, expires_at)
     
     @abstractmethod

@@ -7,6 +7,7 @@ from typing import Dict, Optional
 from .base import AVMProvider
 from ..node import AVMNode, NodeType
 from ..store import AVMStore
+from ..utils import utcnow
 
 
 class MemoryProvider(AVMProvider):
@@ -60,13 +61,13 @@ class MemoryProvider(AVMProvider):
         from datetime import datetime
         
         # generatepath
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = utcnow().strftime("%Y%m%d_%H%M%S")
         slug = title.lower().replace(" ", "_")[:30]
         path = f"/memory/lessons/{timestamp}_{slug}.md"
         
         # Format content
         full_content = f"# {title}\n\n"
-        full_content += f"*Created: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*\n\n"
+        full_content += f"*Created: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*\n\n"
         
         if tags:
             full_content += f"**Tags:** {', '.join(tags)}\n\n"
@@ -81,11 +82,11 @@ class MemoryProvider(AVMProvider):
         """createmarketobservationrecord"""
         from datetime import datetime
         
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = utcnow().strftime("%Y%m%d_%H%M%S")
         path = f"/memory/observations/{symbol}/{timestamp}.md"
         
         content = f"# {symbol} Observation\n\n"
-        content += f"*Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*\n"
+        content += f"*Time: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*\n"
         content += f"*Category: {category}*\n\n"
         content += "---\n\n"
         content += observation

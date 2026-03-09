@@ -21,6 +21,7 @@ import json
 
 from .store import AVMStore
 from .node import AVMNode
+from .utils import utcnow
 
 
 class AgentRole(Enum):
@@ -193,7 +194,7 @@ class AuditLog:
                 agent_id,
                 operation,
                 path,
-                datetime.utcnow().isoformat(),
+                utcnow().isoformat(),
                 json.dumps(details) if details else None,
             ))
     
@@ -253,7 +254,7 @@ class VersionedMemory:
         If base_path exists, creates a versioned entry.
         Links new version to base path.
         """
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = utcnow().strftime("%Y%m%d_%H%M%S")
         
         # Check if base exists
         existing = self.store.get_node(base_path)
@@ -270,7 +271,7 @@ class VersionedMemory:
         # Prepare metadata
         full_meta = meta or {}
         full_meta["author"] = agent_id
-        full_meta["created_at"] = datetime.utcnow().isoformat()
+        full_meta["created_at"] = utcnow().isoformat()
         full_meta["base_path"] = base_path
         
         # Write

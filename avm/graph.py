@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple
 from enum import Enum
 
+from .utils import utcnow
+
 
 class EdgeType(Enum):
     """edge type"""
@@ -28,7 +30,7 @@ class Edge:
     edge_type: EdgeType = EdgeType.RELATED
     weight: float = 1.0
     meta: Dict = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=utcnow)
     
     def to_tuple(self) -> Tuple[str, str, str, float]:
         return (self.source, self.target, self.edge_type.value, self.weight)

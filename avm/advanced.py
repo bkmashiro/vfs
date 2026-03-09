@@ -21,6 +21,7 @@ from enum import Enum
 from .store import AVMStore
 from .node import AVMNode
 from .graph import EdgeType
+from .utils import utcnow
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -196,7 +197,7 @@ class MemoryEvent:
     event_type: EventType
     path: str
     agent_id: str
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=utcnow)
     data: Dict = field(default_factory=dict)
 
 
@@ -308,7 +309,7 @@ class MemoryDecay:
         Returns: Factor between 0 and 1 (1 = no decay)
         """
         if reference_time is None:
-            reference_time = datetime.utcnow()
+            reference_time = utcnow()
         
         # Use last_accessed if available, else updated_at
         last_access = node.meta.get("last_accessed")
@@ -334,7 +335,7 @@ class MemoryDecay:
         
         Returns: [(node, decayed_weight), ...] sorted by decayed weight
         """
-        now = datetime.utcnow()
+        now = utcnow()
         
         decayed = []
         for node in nodes:
@@ -440,7 +441,7 @@ class MemoryCompactor:
         summary = self.summarizer(contents)
         
         # Create summary node
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = utcnow().strftime("%Y%m%d_%H%M%S")
         base_name = base_path.rsplit(".", 1)[0]
         summary_path = f"{base_name}.summary_{timestamp}.md"
         
@@ -451,7 +452,7 @@ class MemoryCompactor:
                 "type": "compaction_summary",
                 "base_path": base_path,
                 "compacted_versions": len(to_compact),
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": utcnow().isoformat(),
             }
         )
         self.store.put_node(summary_node)
@@ -812,11 +813,11 @@ class AccessStats:
             conn.execute("""
                 INSERT INTO access_log (path, agent_id, access_type, timestamp)
                 VALUES (?, ?, ?, ?)
-            """, (path, agent_id, access_type, datetime.utcnow().isoformat()))
+            """, (path, agent_id, access_type, utcnow().isoformat()))
     
     def hot_paths(self, days: int = 7, limit: int = 10) -> List[Tuple[str, int]]:
         """Get most accessed paths in recent days"""
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (utcnow() - timedelta(days=days)).isoformat()
         
         with self.store._conn() as conn:
             rows = conn.execute("""
@@ -833,7 +834,7 @@ class AccessStats:
     def cold_paths(self, days: int = 30, prefix: str = "/memory",
                    limit: int = 20) -> List[AVMNode]:
         """Get paths not accessed in recent days"""
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (utcnow() - timedelta(days=days)).isoformat()
         
         # Get recently accessed paths
         with self.store._conn() as conn:
@@ -868,7 +869,7 @@ class AccessStats:
     
     def agent_activity(self, agent_id: str, days: int = 7) -> Dict[str, int]:
         """Get activity summary for an agent"""
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (utcnow() - timedelta(days=days)).isoformat()
         
         with self.store._conn() as conn:
             rows = conn.execute("""
@@ -940,7 +941,7 @@ class ExportManager:
         lines = [
             f"# Memory Export",
             f"",
-            f"*Exported: {datetime.utcnow().isoformat()}*",
+            f"*Exported: {utcnow().isoformat()}*",
             f"*Prefix: {prefix}*",
             f"*Count: {len(nodes)}*",
             "",
@@ -995,7 +996,7 @@ class ExportManager:
         Returns: Snapshot path
         """
         if name is None:
-            name = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            name = utcnow().strftime("%Y%m%d_%H%M%S")
         
         snapshot_path = f"/snapshots/{name}"
         
@@ -1007,7 +1008,7 @@ class ExportManager:
         snapshot_meta = {
             "type": "snapshot",
             "name": name,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": utcnow().isoformat(),
             "node_count": len(nodes),
             "paths": [n.path for n in nodes],
         }
@@ -1120,7 +1121,7 @@ class TimeQuery:
     
     def _parse_time_range(self, time_range: str) -> Tuple[datetime, datetime]:
         """Parse time range shorthand"""
-        now = datetime.utcnow()
+        now = utcnow()
         
         ranges = {
             "last_1h": timedelta(hours=1),

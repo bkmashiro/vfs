@@ -17,6 +17,7 @@ from pathlib import Path
 
 from .store import AVMStore
 from .node import AVMNode
+from .utils import utcnow
 
 
 class EmbeddingBackend(ABC):
@@ -240,7 +241,7 @@ class EmbeddingStore:
                 self._serialize_vector(vector),
                 content_h,
                 getattr(self.backend, 'model', 'unknown'),
-                datetime.utcnow().isoformat(),
+                utcnow().isoformat(),
             ))
         
         return True

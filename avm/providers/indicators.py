@@ -12,6 +12,7 @@ import urllib.request
 from .base import LiveProvider
 from ..node import AVMNode
 from ..store import AVMStore
+from ..utils import utcnow
 
 
 class TechnicalIndicatorsProvider(LiveProvider):
@@ -324,7 +325,7 @@ class TechnicalIndicatorsProvider(LiveProvider):
         
         lines.extend([
             "",
-            f"*Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
+            f"*Updated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*",
         ])
         
         return self._make_node(
@@ -401,7 +402,7 @@ class TechnicalIndicatorsProvider(LiveProvider):
             content = f"# {symbol}\n\nUnknown indicator: {indicator}\n"
             meta = {}
         
-        content += f"\n*Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*\n"
+        content += f"\n*Updated: {utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC*\n"
         
         return self._make_node(
             f"/live/indicators/{symbol}/{indicator}.md",
