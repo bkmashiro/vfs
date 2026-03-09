@@ -56,7 +56,7 @@ class AVMFuse(Operations):
     
     # Virtual node suffixes
     VIRTUAL_SUFFIXES = {':meta', ':links', ':tags', ':history', ':shared', ':data', ':info', ':path', ':ttl', ':delta', ':mark'}
-    VIRTUAL_DIR_FILES = {':list', ':stats'}
+    VIRTUAL_DIR_FILES = {':list', ':stats', ':inbox', ':topics'}
     VIRTUAL_QUERY_PATTERNS = {':search', ':recall', ':changes'}
     
     def __init__(self, vfs, user=None):
@@ -65,6 +65,14 @@ class AVMFuse(Operations):
         self.fd = 0
         self._open_files: Dict[int, str] = {}
         self._write_buffers: Dict[int, bytes] = {}
+        self._tell_store = None  # Lazy init
+    
+    def _get_tell_store(self):
+        """Lazy initialization of TellStore"""
+        if self._tell_store is None:
+            from .tell import TellStore
+            self._tell_store = TellStore(self.vfs.store.db_path)
+        return self._tell_store
     
     def _parse_path(self, path: str) -> tuple:
         """
@@ -386,6 +394,24 @@ class AVMFuse(Operations):
             stats = self.vfs.stats()
             return json.dumps(stats, indent=2, default=str) + '\n'
         
+        elif suffix == ':inbox':
+            # Show all tells for this agent
+            if not self.user:
+                return '(no agent context)\n'
+            try:
+                tell_store = self._get_tell_store()
+                tells = tell_store.get_all(self.user, limit=50)
+                
+                # Check for mark=read param
+                if params and params.get('mark') == 'read':
+                    tell_store.mark_all_read(self.user)
+                    return f'Marked {len([t for t in tells if not t.read_at])} messages as read.\n'
+                
+                from .tell import format_inbox
+                return format_inbox(tells, show_read=True)
+            except Exception as e:
+                return f'(tell system error: {e})\n'
+        
         elif suffix == ':search':
             query = params.get('q', '') if params else ''
             limit = int(params.get('limit', 10)) if params else 10
@@ -628,6 +654,32 @@ class AVMFuse(Operations):
                 'st_ctime': mtime,
             }
         
+        # Handle /tell/ paths for cross-agent messaging
+        if real_path.startswith('/tell/'):
+            # /tell/<agent> - writable file for sending messages
+            return {
+                'st_mode': stat.S_IFREG | 0o644,
+                'st_nlink': 1,
+                'st_size': 0,
+                'st_uid': os.getuid(),
+                'st_gid': os.getgid(),
+                'st_atime': now,
+                'st_mtime': now,
+                'st_ctime': now,
+            }
+        
+        if real_path == '/tell':
+            # /tell directory
+            return {
+                'st_mode': stat.S_IFDIR | 0o755,
+                'st_nlink': 2,
+                'st_uid': os.getuid(),
+                'st_gid': os.getgid(),
+                'st_atime': now,
+                'st_mtime': now,
+                'st_ctime': now,
+            }
+        
         # Check if it's a directory (prefix with children)
         children = self.vfs.list(real_path, limit=1)
         if children or real_path in ('/', '/memory', '/memory/private', '/memory/shared'):
@@ -658,7 +710,11 @@ class AVMFuse(Operations):
         entries = ['.', '..']
         
         # Add virtual directory files
-        entries.extend([':list', ':stats'])
+        entries.extend([':list', ':stats', ':inbox'])
+        
+        # Add /tell directory at root
+        if real_path == '/':
+            entries.append('tell')
         
         # Add real children
         nodes = self.vfs.list(real_path)
@@ -731,9 +787,33 @@ class AVMFuse(Operations):
                     self.vfs.store.put_node(node, save_diff=False)
             
             content = node.content or ''
+            
+            # Inject urgent tells at the beginning (only on first read, offset=0)
+            if offset == 0 and self.user:
+                content = self._inject_urgent_tells(content)
         
         encoded = content.encode('utf-8')
         return encoded[offset:offset + size]
+    
+    def _inject_urgent_tells(self, content: str) -> str:
+        """Inject urgent unread tells at the beginning of content"""
+        try:
+            tell_store = self._get_tell_store()
+            urgent_tells = tell_store.get_urgent_unread(self.user)
+            
+            if urgent_tells:
+                from .tell import format_tells_for_injection
+                header = format_tells_for_injection(urgent_tells)
+                
+                # Mark as read after injection
+                tell_store.mark_read([t.id for t in urgent_tells])
+                
+                return header + content
+        except Exception:
+            # Don't break reads if tell system fails
+            pass
+        
+        return content
     
     def write(self, path, data, offset, fh):
         """Write to file."""
@@ -806,10 +886,13 @@ class AVMFuse(Operations):
     def release(self, path, fh):
         """Close a file and flush writes."""
         if fh in self._write_buffers and self._write_buffers[fh]:
-            real_path, suffix, _ = self._parse_path(path)
+            real_path, suffix, params = self._parse_path(path)
             content = self._write_buffers[fh].decode('utf-8', errors='replace')
             
-            if suffix:
+            # Handle /tell/<agent> paths for cross-agent messaging
+            if real_path.startswith('/tell/'):
+                self._handle_tell_write(real_path, content, params)
+            elif suffix:
                 self._set_virtual_content(real_path, suffix, content)
             else:
                 # Preserve existing meta or create new with creator
@@ -825,6 +908,45 @@ class AVMFuse(Operations):
         self._write_buffers.pop(fh, None)
         self._open_files.pop(fh, None)
         return 0
+    
+    def _handle_tell_write(self, path: str, content: str, params: dict):
+        """Handle writes to /tell/<agent> paths"""
+        if not self.user:
+            return  # No sender context
+        
+        # Parse path: /tell/agentname or /tell/@all
+        parts = path.strip('/').split('/')
+        if len(parts) < 2:
+            return
+        
+        to_agent = parts[1]
+        
+        # Parse priority from params or path
+        from .tell import TellPriority
+        priority_str = 'normal'
+        if params:
+            priority_str = params.get('priority', 'normal')
+        
+        try:
+            priority = TellPriority(priority_str)
+        except ValueError:
+            priority = TellPriority.NORMAL
+        
+        # Parse optional expiration
+        expires_at = params.get('expires') if params else None
+        
+        # Send the tell
+        try:
+            tell_store = self._get_tell_store()
+            tell_store.send(
+                from_agent=self.user,
+                to_agent=to_agent,
+                content=content.strip(),
+                priority=priority,
+                expires_at=expires_at
+            )
+        except Exception:
+            pass  # Don't break writes if tell fails
     
     def truncate(self, path, length, fh=None):
         """Truncate file."""

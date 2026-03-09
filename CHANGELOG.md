@@ -5,6 +5,31 @@ All notable changes to AVM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-09
+
+### Added
+- **Tell System**: Cross-agent messaging for important notifications
+  - Priority levels: `urgent` (inject into next read), `normal`, `low`
+  - Broadcast to all agents via `@all`
+  - Automatic injection of urgent messages into file reads
+  - `/:inbox` virtual file to view all messages
+  - `/tell/<agent>` path for sending messages
+  - Expiration support and read tracking
+  - 18 new tests for tell functionality
+
+### Usage
+```bash
+# Send a tell (as akashi)
+echo "DB schema changed" > avm/tell/kearsarge?priority=urgent
+echo "Team meeting" > avm/tell/@all
+
+# Read inbox
+cat avm/:inbox
+
+# Mark all as read
+cat avm/:inbox?mark=read
+```
+
 ## [1.0.0] - 2026-03-06
 
 ### Added

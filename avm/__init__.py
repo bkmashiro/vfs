@@ -5,7 +5,7 @@ A config-driven virtual filesystem for AI agents to read/write structured knowle
 Supports custom providers, permissions, and multi-agent collaboration.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from .node import AVMNode
 from .graph import KVGraph
@@ -63,6 +63,10 @@ from .permissions import (
     APIKeyScope, APIKeyManager,
     mode_to_string, string_to_mode
 )
+from .tell import (
+    Tell, TellStore, TellPriority,
+    format_inbox, format_tells_for_injection
+)
 
 __all__ = [
     # Core
@@ -116,4 +120,10 @@ __all__ = [
     "APIKeyManager",
     "mode_to_string",
     "string_to_mode",
+    # Tell (cross-agent messaging)
+    "Tell",
+    "TellStore",
+    "TellPriority",
+    "format_inbox",
+    "format_tells_for_injection",
 ]

@@ -191,6 +191,7 @@ python playground.py
 - **MCP Server** - Integrate with AI agents via MCP protocol
 - **Agent Memory** - Token-aware recall with scoring strategies
 - **Multi-Agent** - Permissions, quotas, audit logging
+- **Tell System** - Cross-agent messaging with priority levels (urgent/normal/low)
 - **Full-Text Search** - FTS5 (English recommended; Chinese lacks tokenizer support)
 
 ## Install
@@ -456,6 +457,33 @@ Access metadata via special suffixes:
 | `:stats` | Statistics | - |
 | `:search?q=` | Search results | - |
 | `:recall?q=` | Token-aware recall | - |
+| `:inbox` | Unread messages | Mark all read |
+
+## Cross-Agent Messaging (Tell)
+
+Send important messages to other agents:
+
+```bash
+# Send urgent message (injected into recipient's next read)
+echo "DB schema changed!" > /mnt/avm/tell/kearsarge?priority=urgent
+
+# Send normal message
+echo "FYI: New API deployed" > /mnt/avm/tell/kearsarge
+
+# Broadcast to all agents
+echo "Team meeting at 3pm" > /mnt/avm/tell/@all
+
+# Check your inbox
+cat /mnt/avm/:inbox
+
+# Mark all as read
+cat "/mnt/avm/:inbox?mark=read"
+```
+
+**Priority levels:**
+- `urgent` - Injected into next file read (any file)
+- `normal` - Shown in `:inbox`
+- `low` - Only shown when explicitly reading `:inbox`
 
 ## Two-Phase Retrieval
 
